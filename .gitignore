@@ -1,0 +1,85 @@
+# =========================
+# Python
+# =========================
+__pycache__/
+*.py[cod]
+*$py.class
+*.pyo
+*.pyd
+*.so
+*.egg
+*.egg-info/
+.eggs/
+
+# =========================
+# Virtual environments
+# =========================
+.venv/
+venv/
+env/
+ENV/
+
+# =========================
+# Build / packaging
+# =========================
+build/
+dist/
+
+# =========================
+# Testing / coverage
+# =========================
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+
+# =========================
+# OS / editor
+# =========================
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+*.swp
+*.tmp
+
+# =========================
+# Logs
+# =========================
+*.log
+logs/
+
+# =========================
+# Secrets / local config
+# =========================
+.env
+.env.*
+*.local
+parkinglot/
+snapshot_status.json
+
+# =========================
+# Jupyter
+# =========================
+.ipynb_checkpoints/
+
+# =========================
+# Claude Code (local only — never push)
+# =========================
+CLAUDE.md
+.claude/
+
+# =========================
+# PGS Change Management
+# =========================
+
+# Governance projections produced during authoring sessions (user-specific)
+drafts/
+
+# Governance Conversation Records (GCR) — local by default
+# To commit a GCR as governance evidence: git add -f sessions/GCR_<ID>.jsonl
+sessions/
+
+# Change management generated outputs — agent output, not compiler output
+change_mgmt/generated/

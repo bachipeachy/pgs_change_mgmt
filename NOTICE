@@ -1,0 +1,14 @@
+PGS — Protocol-Governed Systems
+Copyright 2026 Bhash Ganti aka Bachi
+
+This project introduces a governed authoring layer for Protocol-Governed Systems in which:
+
+- Human intent is expressed conversationally
+- A compiler-projected protocol cognition substrate (PPS) grounds all reasoning
+- Artifacts are generated through structured templates, not freeform generation
+- Human approval is required before compiler validation
+- The compiler remains the sole authority on admissibility
+
+The LLM converses. The compiler admits. The protocol governs.
+
+Extensibility is achieved by governed authoring, not manual artifact construction.
