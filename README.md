@@ -8,13 +8,15 @@ The governed change-management subsystem of Protocol-Governed Systems (PGS). Dri
 
 ---
 
-## Status — v0.5.0 (Upcoming)
+## Status — v0.5.1 (PGS Release 0.6.0)
 
-This repository makes its public debut in **PGS v0.5.0**.
+This repository made its public debut in **PGS v0.5.0**.
 
-The v0.4.0 release established the full PGS execution backend — governance substrate, compiler, runtime, deterministic traces, and eight governed repos. v0.5.0 adds `pgs_change_mgmt` — the governed authoring layer that closes the loop between human intent and admissible protocol topology.
+The v0.4.0 release established the full PGS execution backend — governance substrate, compiler, runtime, deterministic traces, and eight governed repos. v0.5.0 added `pgs_change_mgmt` — the governed authoring layer that closes the loop between human intent and admissible protocol topology.
 
-v0.5.0 will include the complete pipeline implementation and the first end-to-end dossier authoring cycle.
+v0.5.1 wires the `pi` Protocol Inspection surface (pgs_compiler 0.6.0) into the pipeline templates: the agent context declares `pi` as the relationship-query surface, and Stage 3 cites `pi topology impact --json` as mechanically generated impact-analysis evidence.
+
+Repos version independently as of PGS Release 0.6.0; the release itself is declared in the `pgs_workspace` manifest (`manifest.json` → `pgs_release`), which records the compatible set of component versions.
 
 ---
 

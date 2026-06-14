@@ -19,7 +19,8 @@
 
 **Agent execution rules for this stage:**
 - Every question is answered by reading PPS artifacts directly — quote the evidence. No assertions without evidence.
-- Before any "What Must Be Authored" entry: search the snapshot inventory for an existing artifact that satisfies it (events, transforms, and side-effect substrates are the most commonly missed). Record what was searched.
+- Impact analysis is mechanically generated, never hand-assembled: cite `pi topology impact <fqdn> --json` as the consumer-closure evidence for any artifact this CR touches (`pi artifact refs` for direct consumers, `pi store consumers` for storage). Inspection output carries snapshot authority; the review question becomes "is this generated list acceptable?", not "did you find everything?".
+- Before any "What Must Be Authored" entry: search the snapshot inventory for an existing artifact that satisfies it (events, transforms, and side-effect substrates are the most commonly missed; `pi vocab search <term>` is the search surface). Record what was searched.
 - New capabilities are named in business language here. Provisional codes appear in Stage 5; binding FQDNs in Stage 6b. Existing artifacts are cited by exact FQDN.
 - The iteration count in the header MUST match the iteration sections actually present in this document.
 

@@ -17,6 +17,8 @@
 
 **Path resolution.** Doctrine and snapshot artifacts live in the `pgs_workspace` repository (a sibling of `pgs_change_mgmt`). Templates and dossiers live in this repository under `change_mgmt/`. Paths below are relative to those two roots as noted.
 
+**Inspection surface.** The `pi` command processor (Protocol Inspection, in `pgs_compiler`) is the query surface over the compiled snapshot set — query relationships instead of grepping markdown: `pi artifact refs <fqdn>` (consumers), `pi topology impact <fqdn> --json` (blast radius), `pi artifact source <fqdn>` (authoring MD), `pi vocab search <term>`. Inspection answers carry snapshot authority and are admissible as dossier evidence. Requires `PGS_WORKSPACE` set to the workspace root; see `pgs_workspace/doc/pgs_cli_cheatsheet.txt` for the full taxonomy.
+
 ---
 
 ## Reading Assignment
