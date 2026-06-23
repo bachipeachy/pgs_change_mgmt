@@ -1,110 +1,240 @@
-# Stage 2 — Domain Model Discovery: [domain] / [subdomain]
-**Stage:** 2 — Domain Model Discovery
-**CR:** change_request_[subdomain]_v0.md
-**Status:** DRAFT
-**Feeds:** Stage 3 — Analysis Loop
+# Stage 2 — Domain Model Verification: [domain] / [subdomain]
+**Stage:** 2 — Domain Model Verification  
+**CR:** change_request_[subdomain]_v0.md  
+**Status:** DRAFT  
+**Feeds:** Stage 3 — Analysis Loop  
+
+> **S2 verifies the semantic model inherited from S1 — it does not discover the domain from
+> scratch.** Stage 1 already established the *meaning* (vocabulary, lifecycle states, events,
+> invariants, authority). S2's job is bounded: confirm that model against the compiled snapshot,
+> establish what already exists for each Stage-1 **System Belief**, and capture the gaps. It
+> **discovers facts**; it does not **decide** (extend-vs-new is Stage 3) and it does not author
+> solution artifacts.
 
 ---
 
-## Stage Inputs — Questions for the Human
+## Document Contract
 
-*Answer crisply before drafting. The right column states how the agent uses each answer.*
+**This artifact is a structured register document — not a narrative.**
 
-| # | Question for the Human | How the Agent Uses the Answer (Intent) |
-|---|------------------------|----------------------------------------|
-| 1 | What are the business entities this change deals in, and which attributes matter? | Becomes Section 1. Entity attributes drive identity semantics (Stage 5) and store schemas (Stage 6b) — missing attributes here surface as schema gaps later. |
-| 2 | For each entity: is it current state, accumulated history, or a stable identity binding? Can records be corrected? Deleted? | Determines the candidate storage model (mutable / append-only / registry). Getting this wrong produces invisible runtime bugs. |
-| 3 | Walk through each business process step by step — who initiates it, what decisions occur, what is recorded? | Becomes Section 2. Process steps become workflow nodes in Stage 6b; a step you omit here will be missing from the execution graph. |
-| 4 | Which behaviors do you believe already exist in the running system? | Cross-checked against the PPS baseline (Section 3). Mismatches between belief and snapshot are themselves findings. |
+VALID OUTPUT:
+- Populated register tables (every required register below)
+- Existing artifacts cited by exact FQDN — only in the PPS Baseline register
+- Business-language entity / process / observation / gap descriptions
 
-**Agent execution rules for this stage:**
-- The PPS Baseline (Section 3) MUST come from reading `pps_snapshot/index.json` and the relevant artifacts directly — never from memory or from this conversation. List what was searched, not only what was found: reusable events (EV_), transforms (CT_), and contracts (CC_) frequently already exist under names the human did not mention.
-- Do not invent artifact codes for NEW capabilities in this document. New capabilities are named in business language; existing artifacts are cited by exact FQDN.
+INVALID OUTPUT:
+- Narrative summaries, reasoning essays, executive summaries
+- Free-form prose replacing required registers
+
+A required register with no rows MUST be rendered as a single row:
+
+| NONE IDENTIFIED |
+
+A prose-only or empty *required* register is a structural defect — the renderer rejects the
+document mechanically before any human reviews it.
+
+---
+
+### A. Semantic Inheritance — start from Stage 1, do not re-derive
+
+The semantic model is **given** by Stage 1; you inherit it, you do not rediscover it:
+
+| Inherited from Stage 1 | How S2 uses it |
+|------------------------|----------------|
+| **Business Vocabulary** (the objects) | Seed the Business Entities register — confirm and map each object to evidence; do not invent a different object set. |
+| **Lifecycle States** | The states each entity moves through — confirm the snapshot supports them; a missing state is a gap. |
+| **Business Events** | The moments the domain must recognize — find what (if anything) already emits them. |
+| **Business Invariants** | Facts that must hold — note any existing artifact that already enforces (or violates) one. |
+| **System Beliefs** (+ Verification Goals) | The **bounded discovery targets** — see §B. |
+| **Known Facts · Governance Scope** | Authoritative business truths and the subdomain neighborhood. |
+
+S2 does NOT ask "what is a Chain?" — Stage 1 answered that. S2 asks "given these semantics, what
+evidence exists in the snapshot, and what is missing?"
+
+### B. The Spine — Belief Verification drives this stage
+
+**Belief Verification (§3) is the spine of S2 — fill it FIRST, before any other register.** One
+row per Stage-1 **System Belief**: ground its Verification Goal and record the result —
+`VERIFIED` · `NOT_FOUND` · `INSUFFICIENT_EVIDENCE`. Verification is scoped to the Stage-1 **System
+Beliefs** and **Requested Outcomes** — not the domain at large.
+
+**Every other register is a PROJECTION of the verified beliefs.** An entity, process, gap,
+observation, concern, or baseline artifact may appear in this stage ONLY because verifying a
+belief (or serving a Requested Outcome) surfaced it. A row that traces to no belief and no
+requested outcome does not belong here — its `Source Finding` must name the belief or outcome it
+serves. The **PPS Baseline** contains ONLY artifacts that verify a belief or directly serve a
+requested outcome; an artifact tied to no belief and no outcome — **STOP, do not list it.**
+
+**The belief ledger is the STOP condition: S2 is complete when every System Belief has a result.**
+It does NOT continue merely because additional related artifacts exist — a successful grounding is
+not a new search frontier. **Absence is a final answer:** if a search returns nothing (e.g.
+`GENESIS → 0 results`), record the belief as `NOT_FOUND` and move on. Never re-search variants of a
+term that already returned nothing.
+
+### C. Open Questions — a blocker list, not a scratchpad
+
+A row belongs in **Open Questions** ONLY if it BOTH (a) blocks a Stage-3 decision AND (b) cannot
+be answered from evidence. It is NOT a list of artifacts you noticed, and NOT an
+end-of-budget dump. `open_questions = NONE IDENTIFIED` is a **healthy, successful** outcome.
+
+---
+
+### Business-Language Rule
+
+These registers MUST NOT contain protocol artifact names or FQDNs (express discovery in
+**business language**; naming solution artifacts here is premature design — FQDNs are
+introduced at Stage 5+):
+
+- Business Entities · Entity Attributes · Business Processes · Process Steps · Gaps ·
+  Architectural Observations · Open Questions · Discovery Concerns
+
+VALID: "the canonical chain that commits proposed blocks"  
+INVALID: `CC_COMMIT_BLOCK_TO_CHAIN_V0`, `WF_GENESIS_BOOTSTRAP_V0`
+
+**WHERE FQDNs GO.** When an observation, gap, or concern is grounded in an existing artifact, the
+FQDN goes ONLY in that row's **Evidence** and/or **Source Finding** column — NEVER in the
+content/description cell (Observation, Gap, Impact, Concern, Question, Why It Matters). Write the
+*business meaning* in the content cell and let the FQDN in the evidence column carry the proof.
+INVALID: `Observation = "a consensus loop workflow exists (WF_RUN_CONSENSUS_LOOP_V0)"`.
+VALID: `Observation = "a consensus loop already proposes blocks and drives slot processing"` ·
+`Evidence = WF_RUN_CONSENSUS_LOOP_V0`. The renderer rejects an FQDN found in a content cell.
+
+**EXCEPTION — Belief Verification & PPS Baseline.** Those registers cite existing artifacts by
+exact FQDN in their `Evidence` / `FQDN` columns — that FQDN is the evidence.
+
+---
+
+### Discovery Classification (DISCOVERY_CLASSIFICATION_REQUIRED)
+
+Every discovered item carries an `Evidence Status`, so a hypothesis is never silently promoted
+to a fact:
+
+- **OBSERVED** — supported directly by grounding evidence (confirmed via a tool call).
+- **INFERRED** — derived from observed evidence but NOT directly verified (a reasoned suspicion).
+- **OPEN** — requires future investigation; not yet established.
+
+**The PPS Baseline is OBSERVED-only** — every row is a grounded, verified existing artifact. A
+capability you *suspect* should exist but could not ground is **INFERRED**, and it belongs in
+the Gap Register (as an INFERRED gap), NEVER in the Baseline. Do NOT extrapolate an artifact
+from a pattern — seeing `APPEND_TX_EVENT` + `APPEND_VALIDATOR_EVENT` does NOT mean an
+`APPEND_BLOCK_EVENT` exists. If you did not ground it, it is INFERRED, not OBSERVED.
 
 ---
 
 ## 1. Business Entities
 
-*Name every domain entity involved in this CR. An entity is a thing the business talks about — not a data store or an artifact.*
+*Confirm/map the Stage-1 Business Vocabulary against the snapshot — these are the inherited
+objects, not a new set. A thing the business talks about, not a data store or artifact.*
 
-### [Entity Name]
-*One sentence: what is this entity in business terms.*
+<!-- register:entities business_language -->
+| Entity | Description | Store Model | Evidence Status | Source Finding |
+|--------|-------------|-------------|-----------------|----------------|
 
-| Attribute | Description |
-|-----------|-------------|
-| [attribute] | [what it represents] |
+### Entity Attributes
 
-*Add one subsection per entity. Typical entities: actor types, requests/proposals, decisions, registries, surfaces, records.*
+*One row per (entity, attribute) — attribute-level, so S5 (identity) and S6b (storage schema) can consume directly.*
+
+<!-- register:entity_attributes business_language -->
+| Entity | Attribute | Meaning | Evidence Status | Source Finding |
+|--------|-----------|---------|-----------------|----------------|
 
 ---
 
 ## 2. Business Processes
 
-*Name every business process involved. A process is a sequence of decisions or actions the domain performs — not a workflow or CC pipeline.*
+*Every business process — a sequence of business decisions/actions, implementation-free.*
 
-### Process 1 — [Process Name]
-*Description of what happens, in business steps. Keep implementation-free.*
+<!-- register:business_processes business_language -->
+| Process | Initiator | Outcome | Evidence Status | Source Finding |
+|---------|-----------|---------|-----------------|----------------|
 
-1. [Step 1]
-2. [Step 2]
-3. [Step 3]
+### Process Steps
 
-### Process 2 — [Process Name]
-*Continue as needed.*
+*One row per step, in order — so S6b workflow authoring can consume the sequence directly.*
 
----
-
-## 3. PPS Baseline — What Already Exists
-
-*Read the PPS snapshot (pps_snapshot/index.json) and relevant registry artifacts directly. Do not rely on memory.*
-
-*For each relevant existing capability, state: what it does, whether its shape matches this CR's needs, and what specifically it cannot do.*
-
-### [Existing Capability Name]
-
-[What the existing artifact does. What fields it operates on. What its governance shape is.]
-
-**Fit for this CR:** [exact match | partial — [what it can and cannot do] | mismatch]
-
-*Add one subsection per relevant existing capability.*
+<!-- register:process_steps business_language -->
+| Process | Step # | Action | Record Produced | Evidence Status | Source Finding |
+|---------|--------|--------|-----------------|-----------------|----------------|
 
 ---
 
-## 4. Gap Analysis — What Is Missing
+## 3. Belief Verification — THE SPINE (fill this register FIRST)
 
-*For each gap: state what is missing, classify its severity, and describe its impact.*
+*The spine of S2: every other register projects from these rows. One row per Stage-1 System
+Belief. Ground its Verification Goal and record the Result. This is the STOP condition: S2 is
+complete when every belief has a result. `NOT_FOUND` is a valid, final result — absence is an
+answer, not a reason to keep searching.*
 
-### Gap 1 — [Gap Name] ([CRITICAL | OPEN QUESTION | MINOR])
-
-[What is missing. What artifact or capability does not exist. Why it matters for this CR.]
-
-**Impact:** [what cannot proceed without this]
-
-### Gap 2 — [Gap Name] ([CRITICAL | OPEN QUESTION | MINOR])
-
-[Continue as needed. CRITICAL gaps block authoring. OPEN QUESTION gaps feed into Stage 3. MINOR gaps are noted but do not block.]
+<!-- register:belief_verification -->
+| Belief | Result (VERIFIED, NOT_FOUND, INSUFFICIENT_EVIDENCE) | Evidence | Source Finding |
+|--------|------------------------------------------------------|----------|----------------|
 
 ---
 
-## 5. Summary: Extend vs. New Subdomain
+## 4. PPS Baseline — What Already Exists
 
-*State the architectural question explicitly: does this CR extend an existing subdomain or require a new one?*
+*Read the compiled snapshot directly (grounding tools), not memory. ONLY artifacts that verify a
+System Belief or directly serve a Requested Outcome — not the whole domain inventory. One row per
+relevant existing capability, cited by exact FQDN. Fit ∈ EXACT | PARTIAL | MISMATCH (an
+observation of how well it matches the need — NOT a reuse decision; that is Stage 3).*
 
-**The question:** Does [the new capability] belong inside [existing subdomain] or does it require [proposed subdomain]?
-
-**Evidence for extend:** [what argues for putting this inside the existing subdomain]
-
-**Evidence for new subdomain:** [what argues for a separate subdomain — separate governance concern, separate CC configuration, different ownership, etc.]
-
-*Do not decide here. This is the question for Stage 3.*
+<!-- register:pps_baseline_fqdns -->
+| Capability | FQDN | What It Does | Fit (EXACT, PARTIAL, MISMATCH) | Cannot Do |
+|-----------|------|--------------|--------------------------------|-----------|
 
 ---
 
-## 6. Open Questions for Stage 3
+## 5. Gap Analysis — What Is Missing
 
-| # | Question | Why It Matters |
-|---|----------|---------------|
-| Q1 | [question] | [what the answer determines] |
-| Q2 | [question] | [what the answer determines] |
+*Each gap in business language. Severity ∈ CRITICAL (blocks authoring) | OPEN QUESTION (feeds Stage 3) | MINOR (noted).*
 
-*Each open question becomes a named question in the Stage 3 Analysis Loop. Questions that can be answered by reading PPS artifacts should be resolved there, not deferred.*
+<!-- register:gaps business_language -->
+| Gap | Severity | Impact | Evidence Status | Source Finding |
+|-----|----------|--------|-----------------|----------------|
+
+---
+
+## 6. Architectural Observations
+
+*Architectural FACTS surfaced WHILE verifying a belief — not decisions, not free discovery. Each
+row's `Source Finding` names the belief it came from. Stage 3 argues extend-vs-new from these.
+E.g. "a validator lifecycle already exists", "no canonical chain storage was found".*
+
+<!-- register:architectural_observations business_language -->
+| Observation | Evidence | Evidence Status | Source Finding |
+|-------------|----------|-----------------|----------------|
+
+---
+
+## 7. Discovery Concerns
+
+*Concerns surfaced WHILE verifying a belief — each traces back to one via `Source Finding`. The
+primary feed into Stage 3 (operationalizes CONCERN_TRACEABILITY_REQUIRED). Severity ∈ CRITICAL |
+MAJOR | MINOR.*
+
+<!-- register:discovery_concerns business_language -->
+| Concern | Evidence | Severity | Evidence Status | Source Finding |
+|---------|----------|----------|-----------------|----------------|
+
+---
+
+## 8. Open Questions for Stage 3
+
+*A row belongs here ONLY if it blocks a Stage-3 decision AND cannot be answered from evidence (see
+§C). NOT an artifact inventory. Empty (`NONE IDENTIFIED`) is a healthy outcome. Category ∈
+business | governance | identity | workflow | storage | policy | unknown.*
+
+<!-- register:open_questions business_language optional -->
+| Question | Category | Why It Matters | Source Finding |
+|----------|----------|----------------|----------------|
+
+---
+
+## gov_projection — Governed Handoff to Stage 3
+
+*Governed, lossless, identity-preserving (Stage 0 / field manual §4.7). Every register is forwarded — Stage 3 never re-discovers what Stage 2 modelled. Emit keys match the register ids above exactly.*
+
+| Direction | Fields |
+|-----------|--------|
+| **Consumes** ← Stage 1 | business_vocabulary · known_facts · system_beliefs · lifecycle_states · business_events · governance_scope |
+| **Emits** → Stage 3 | entities · entity_attributes · business_processes · process_steps · belief_verification · pps_baseline_fqdns · gaps · architectural_observations · discovery_concerns · open_questions |

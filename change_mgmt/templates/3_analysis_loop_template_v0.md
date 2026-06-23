@@ -1,107 +1,170 @@
 # Stage 3 — Analysis Loop: [domain] / [subdomain]
-**Stage:** 3 — Analysis Loop
-**CR:** change_request_[subdomain]_v0.md
-**Iterations:** [N] ([saturated | in progress])
-**Status:** DRAFT
-**Feeds:** Stage 4 — Business Model
+**Stage:** 3 — Analysis Loop  
+**CR:** change_request_[subdomain]_v0.md  
+**Status:** DRAFT  
+**Feeds:** Stage 4 — Business Model  
+
+> **S3 decides.** S1 discovers, S2 models, **S3 decides** — given what exists, *what should be
+> authored?* Its signature output is the **Decision Classification** (REUSE / EXTEND /
+> AUTHOR_NEW) for every capability. S3 resolves the extend-vs-new question S2 deferred, by
+> evidence — never by assertion. Every decision traces to a grounded finding.
 
 ---
 
-## Stage Inputs — Questions for the Human
+## Document Contract
 
-*Most Stage 3 questions are answered by the agent reading PPS artifacts. Ask the human only what evidence cannot decide. Answer crisply; the right column states how each answer is used.*
+**This artifact is a structured register document — not a narrative.** No free-form iteration
+prose. Capture analysis, verification, and decisions as registers.
 
-| # | Question for the Human | How the Agent Uses the Answer (Intent) |
-|---|------------------------|----------------------------------------|
-| 1 | Where evidence supports both "extend existing subdomain" and "declare new subdomain" — which governance boundary do you intend? | Locks the Subdomain Placement Decision. This is a governance topology declaration only the human can make. |
-| 2 | When a gap could be closed by reusing an existing capability with compromises, or by authoring a new one — what is your tolerance for each compromise? | Decides REUSE vs NEW in Consolidated Findings, which fixes the authoring scope and cost. |
-| 3 | Any business policies (limits, privileged actors, initial conditions, monetary rules) not yet stated in Stages 1–2? | Recorded as evidence under the relevant question and carried into the Stage 4 Constraint Register with source "User clarification". |
+VALID OUTPUT:
+- Populated register tables (every required register)
+- Existing artifacts cited by exact FQDN in dependency / impact / evidence columns
+- Business-language capability and rationale descriptions in decision registers
 
-**Agent execution rules for this stage:**
-- Every question is answered by reading PPS artifacts directly — quote the evidence. No assertions without evidence.
-- Impact analysis is mechanically generated, never hand-assembled: cite `pi topology impact <fqdn> --json` as the consumer-closure evidence for any artifact this CR touches (`pi artifact refs` for direct consumers, `pi store consumers` for storage). Inspection output carries snapshot authority; the review question becomes "is this generated list acceptable?", not "did you find everything?".
-- Before any "What Must Be Authored" entry: search the snapshot inventory for an existing artifact that satisfies it (events, transforms, and side-effect substrates are the most commonly missed; `pi vocab search <term>` is the search surface). Record what was searched.
-- New capabilities are named in business language here. Provisional codes appear in Stage 5; binding FQDNs in Stage 6b. Existing artifacts are cited by exact FQDN.
-- The iteration count in the header MUST match the iteration sections actually present in this document.
+INVALID OUTPUT:
+- Narrative summaries / reasoning essays replacing registers
+- A decision with no grounded evidence; an assertion the snapshot did not confirm
 
----
-
-## Iteration 1
-
-*Each iteration resolves the open questions from Stage 2 or from the prior iteration by reading PPS artifacts directly. Answer each question with: the finding, the source evidence, and the resolution.*
-
-### Q1 — [Question from Stage 2]
-
-**Finding:** [One-sentence verdict.]
-
-*[Evidence: what you read, what it says. Quote relevant fields if useful. No assertions without evidence.]*
-
-**Resolution:** [What this finding implies for the authoring scope. Is the gap real? Does it require new artifacts? Does it expand the scope?]
-
-**Answer:** [The definitive answer that feeds into the Business Model.]
+A required register with no rows MUST render as a single `| NONE IDENTIFIED |` row. The renderer
+rejects a prose-only or empty register mechanically before any human reviews it.
 
 ---
 
-### Q2 — [Question from Stage 2]
+### Decision Classification (DECISION_CLASSIFICATION_REQUIRED)
 
-**Finding:** [One-sentence verdict.]
+S3's central artifact. Every capability the CR needs is classified:
 
-*[Evidence.]*
+- **REUSE** — an existing artifact satisfies it as-is (cite the FQDN).
+- **EXTEND** — an existing artifact nearly satisfies it; a bounded change suffices (cite it).
+- **AUTHOR_NEW** — nothing existing fits; a new artifact is required (business-language name only).
 
-**Resolution:** [Implication for scope/design.]
+A REUSE/EXTEND decision MUST name the existing artifact (in `alternatives_checked`). An
+AUTHOR_NEW decision MUST record which existing alternatives were examined and rejected — "I
+searched and found nothing" is only credible with the search shown.
 
-**Answer:** [Definitive answer.]
+### Discovery Classification (carried from S2)
+
+Each analysis finding carries an `evidence_status` and a `confidence`:
+
+- **OBSERVED** — confirmed by a grounding call · **INFERRED** — reasoned, not directly verified ·
+  **OPEN** — unresolved.
+- Confidence ∈ **HIGH | MEDIUM | LOW** — a reviewer focuses on LOW-confidence findings.
 
 ---
 
-*Add additional Q[n] sections as needed. If a question surfaces a new unknown, record it as Q[n+1] and resolve it in this iteration or the next.*
+### Stage 3 execution rules
+
+- Every finding is answered by reading the snapshot directly (grounding tools) — quote the
+  evidence; no assertion without it. `GROUNDING_NOT_INHERITED`: re-verify, never trust prior
+  narrative.
+- **Impact is mechanically captured, never summarized from memory** — the `impact_analysis`
+  register records `pi topology impact` / `artifact_refs` output verbatim (consumer counts are
+  evidence, not estimates).
+- **Before any AUTHOR_NEW decision**, search the snapshot for an existing artifact that
+  satisfies it and record the search in `alternatives_checked`.
+- The **Mandatory Verification Pass** re-checks every prior assumption/finding against the
+  snapshot (`verification_results`): CONFIRMED with fresh evidence or OVERTURNED.
 
 ---
 
-## Saturation Assessment
+## Stage Inputs — Questions for the Human (reference)
 
-**Three-part saturation criterion:**
+*Reference only — asked only where evidence cannot decide; not filled here.*
 
-| Criterion | Status | Evidence |
+| # | Question for the Human | How the Agent Uses the Answer |
+|---|------------------------|-------------------------------|
+| 1 | Where evidence supports both "extend" and "new subdomain" — which boundary do you intend? | Locks the Placement Decision (a governance topology call only the human makes). |
+| 2 | Reuse-with-compromise vs author-new — tolerance for each compromise? | Decides REUSE/EXTEND vs AUTHOR_NEW in the authoring_decisions register. |
+| 3 | Any business policies (limits, privileged actors, monetary rules) not yet stated? | Recorded as findings; carried to the S4 Constraint Register. |
+
+---
+
+## 1. Analysis Findings
+
+*One row per analysed question (from S2 open questions / prior iterations). resolution_status ∈ CLOSED | OPEN.*
+
+<!-- register:analysis_findings -->
+| Question Id | Finding | Impact | Evidence Status (OBSERVED, INFERRED, OPEN) | Confidence (HIGH, MEDIUM, LOW) | Resolution Status (CLOSED, OPEN) | Evidence |
+|-------------|---------|--------|-----------------|------------|-------------------|----------|
+
+---
+
+## 2. Mandatory Verification Pass
+
+*Re-verify every prior assumption/finding against the snapshot directly (grounding not inherited). Result ∈ CONFIRMED | OVERTURNED. An item that cannot be re-confirmed is an open gap, not a finding.*
+
+<!-- register:verification_results -->
+| Item | Origin | Result (CONFIRMED, OVERTURNED) | Evidence |
+|------|--------|--------|----------|
+
+---
+
+## 3. Dependency Discoveries
+
+*Cross-artifact dependencies surfaced during analysis (feeds S4 dependency graph + authoring order). Disposition ∈ EXISTING | REUSE | AUTHOR_NEW | INVESTIGATE.*
+
+<!-- register:dependency_discoveries -->
+| Dependency | Type | Disposition (EXISTING, REUSE, AUTHOR_NEW, INVESTIGATE) | Evidence |
+|------------|------|-------------|----------|
+
+---
+
+## 4. Impact Analysis
+
+*Mechanically captured consumer-closure / blast-radius for every artifact this CR touches. Evidence is the verbatim `pi topology impact` / `artifact_refs` output.*
+
+<!-- register:impact_analysis -->
+| Artifact | Impact Scope | Consumer Count | Evidence |
+|----------|--------------|----------------|----------|
+
+---
+
+## 5. Authoring Decisions
+
+*S3's signature output — the register of **committed** capability decisions. One row per capability: the Decision Classification, the alternatives examined, and the rationale. `capability` is business language (no FQDN — name the need, not the artifact); `decision` is a controlled vocabulary — **exactly one of REUSE / EXTEND / AUTHOR_NEW** (a final, committed call; INVESTIGATE is NOT valid here). `rationale` and `alternatives_checked` may cite existing FQDNs as justification/evidence.*
+
+> **Promotion rule.** This register records only capabilities whose disposition is COMMITTED. A
+> capability still under investigation does NOT belong here — it stays in §3 Dependency Discoveries
+> with `Disposition = INVESTIGATE` and is promoted to an Authoring Decision only once analysis
+> resolves it to REUSE / EXTEND / AUTHOR_NEW. Never carry an unresolved item into both registers.
+
+<!-- register:authoring_decisions business_language=capability -->
+| Capability | Decision (REUSE, EXTEND, AUTHOR_NEW) | Rationale | Alternatives Checked | Source Finding |
+|------------|----------|-----------|----------------------|----------------|
+
+---
+
+## 6. Subdomain Placement Decision
+
+*The extend-vs-new resolution S2 deferred — a governance topology call. Decision ∈ NEW_SUBDOMAIN | EXTEND.*
+
+<!-- register:placement_decision business_language=subdomain -->
+| Decision (NEW_SUBDOMAIN, EXTEND) | Subdomain | Rationale | Source Finding |
+|----------|-----------|-----------|----------------|
+
+---
+
+## 7. Saturation Assessment
+
+*Analysis is saturated only when every criterion is SATISFIED. Status ∈ SATISFIED | NOT_SATISFIED.*
+
+<!-- register:saturation business_language=criterion -->
+| Criterion | Status (SATISFIED, NOT_SATISFIED) | Evidence |
 |-----------|--------|----------|
-| No unresolved CRITICAL gaps in the gap register | [SATISFIED \| NOT SATISFIED] | [what gap(s) remain, if any] |
-| No open analyst questions | [SATISFIED \| NOT SATISFIED] | [what questions remain, if any] |
-| No dependency expansion in the last review pass | [SATISFIED \| NOT SATISFIED] | [what new dependencies appeared, if any] |
 
-**[Saturation achieved in N iterations. | NOT SATURATED — proceed to Iteration 2.]**
+*Required criteria: (1) no unresolved CRITICAL gaps; (2) no open analyst questions; (3) no dependency expansion in the last pass; (4) verification pass complete, no OVERTURNED item unresolved; (5) every INFERRED finding promoted to OBSERVED, explicitly accepted, or carried forward with a reason.*
 
 ---
 
-## Consolidated Findings
+## gov_projection — Governed Handoff to Stage 4
 
-*Produced at saturation. This section is the authoritative input to Stage 4.*
+*Governed, lossless, identity-preserving (Stage 0 / field manual §4.7). The decision registers cross to S4; the analysis/verification/impact registers are S3's audit trail (not re-derived downstream). Emit keys match the register ids above.*
 
-### What Already Exists (fully reusable)
+*The bounded inputs and emit keys mirror the engine's gov_projection schema exactly
+(`contracts/gov_projection.py`): S3 consumes the S1 framing plus S2's discovery output.*
 
-| Artifact | Status | Reuse |
-|----------|--------|-------|
-| [artifact or capability] | EXISTS | [REUSE — reason] |
-
-### What Must Be Authored (new capabilities)
-
-| Capability (business name) | Why New (and what existing artifacts were checked) |
-|----------------------------|---------------------------------------------------|
-| [business capability name — codes assigned in Stage 6b] | [why no existing artifact satisfies it; name the candidates examined] |
-
-### Subdomain Placement Decision
-
-**[NEW subdomain — [name] | EXTEND existing — [name]]**
-
-*State the reasoning. A new subdomain is required when: the governance policy (CC configuration, tool registries, tier mappings, parameter constraints) is distinct from any existing subdomain's policy. Extending an existing subdomain is correct when: the capability is structurally the same and only the artifact FQDN binding differs.*
-
----
-
-## Inputs to Stage 4 — Business Model
-
-*Summarize the key facts that Stage 4 must incorporate.*
-
-1. **[Fact category]:** [what was discovered]
-2. **[Fact category]:** [what was discovered]
-3. **[Fact category]:** [what was discovered]
-
-*Every CRITICAL gap resolution, subdomain placement decision, and reuse vs. new-artifact decision must appear here. Stage 4 takes these as given — they are not re-litigated in Business Model.*
+| Direction | Fields |
+|-----------|--------|
+| **Consumes** ← Stage 1 | cr_type · assumptions · business_invariants · lifecycle_states · business_events · authority_boundaries |
+| **Consumes** ← Stage 2 | belief_verification · pps_baseline_fqdns · gaps · architectural_observations · discovery_concerns · open_questions |
+| **Emits** → Stage 4 | authoring_decisions · dependency_discoveries · placement_decision · saturation |

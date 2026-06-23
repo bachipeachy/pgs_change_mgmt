@@ -8,67 +8,98 @@
 
 ---
 
+## Document Contract
+
+**This artifact is a structured register document — not a narrative.** S7 is mechanical: it
+re-orders the artifacts Stage 6b already assigned into a build sequence. The worker emits register
+ROWS; a deterministic renderer owns the document; a cross-stage oracle checks the codes against the
+Stage 6b registers.
+
+VALID OUTPUT:
+- Populated register tables (every required register below)
+- Every `code` cell a binding FQDN copied VERBATIM from a Stage 6b register
+
+INVALID OUTPUT:
+- Narrative summaries replacing registers
+- A code not present in the Stage 6b `new_artifacts` / `existing_inventory` registers
+- A non-contiguous `step` sequence (a gap means a silently dropped artifact)
+
+---
+
+### Mandate discipline (the oracle enforces these)
+
+- **No design here.** S7 adds nothing and drops nothing — it ORDERS what Stage 6b assigned. No new
+  codes, no new actions.
+- **Copy every code VERBATIM from the Stage 6b registers** — never re-type, re-spell, or introduce
+  a code. A binding FQDN is immutable; re-typing one (even a transposed letter) mints a second,
+  permanently-misnamed artifact. Every code in this mandate MUST appear in a Stage 6b register
+  (`new_artifacts` for NEW, `existing_inventory` for REPLACE/EXTEND).
+- **Reconcile:** the NEW / REPLACE / EXTEND counts in `mandate_artifact_summary` MUST equal Stage
+  6b's `artifact_summary`. `step` numbering is contiguous from 1.
+
+---
+
 ## Stage Inputs — Questions for the Human
 
 | # | Question for the Human | How the Agent Uses the Answer (Intent) |
 |---|------------------------|----------------------------------------|
-| 1 | Gate 2: do you approve this mandate, locking the dossier before artifact authoring begins? | Gate 2 approval freezes scope. After it, any departure from this mandate is an Approved Deviation recorded in the Stage 8 manifest — not a silent change. |
-| 2 | Any sequencing constraints beyond the dependency graph (e.g., author a risky artifact first)? | Adjusts wave ordering without changing the dependency-derived topological order. |
-
-**Agent execution rules for this stage:**
-- This stage is mechanical: it re-derives build order from the Stage 6b dependency graph. **No new design decisions, no added or dropped artifacts.** If something looks wrong, fix Stage 6b and re-derive.
-- Reconcile before completion: the artifact list here must equal the Stage 6b Artifact Summary exactly — same artifacts, same actions, same counts. Step numbering must be contiguous (a missing step number usually means an artifact was silently dropped).
-- Every cross-subdomain note must respect: calls/reads permitted, writes forbidden.
+| 1 | Gate 2: approve this mandate, locking the dossier before authoring begins? | Gate 2 freezes scope. After it, any departure is an Approved Deviation in the Stage 8 manifest — never a silent change. |
+| 2 | Any sequencing constraints beyond the dependency graph (e.g., author a risky artifact first)? | Adjusts `wave` ordering without changing the dependency-derived topological order. |
 
 ---
 
 ## 1. Build Dependency Order
 
-Derived by topological sort of the artifact dependency graph produced in Stage 6b (Design Intent). Parallel work is grouped into waves. The critical path is the longest sequential dependency chain.
+*Topological sort of Stage 6b's `new_artifacts` over the dependencies in `execution_topology` /
+`rb_declarations`. ONE row per artifact to AUTHOR — `action` ∈ NEW / REPLACE / EXTEND only. A
+REUSE / existing dependency is NOT authored: reference it in `depends_on`, never as its own row.
+`step` is the GLOBAL execution order, contiguous from 1 across all waves; `wave` groups parallel
+work. `code` is copied verbatim from a Stage 6b register; `depends_on` lists prerequisite codes (or `—`).*
 
-### Wave 1 — Parallel (no dependencies)
-
-| Step | Artifact | Action | Subdomain | Depends On |
-|------|----------|--------|-----------|------------|
-
-### Wave 2 — Parallel (after Wave 1 prerequisites)
-
-| Step | Artifact | Action | Subdomain | Depends On |
-|------|----------|--------|-----------|------------|
-
-*(add waves as needed)*
+<!-- register:build_order -->
+| Wave | Step | Code | Action (REPLACE, EXTEND, NEW) | Subdomain | Depends On |
+|------|------|------|-------------------------------|-----------|------------|
 
 ---
 
 ## 2. Critical Path
 
-Steps: [list critical path step numbers in sequence]
+*The longest sequential dependency chain, in order. Each `code` is a build_order step on the
+critical path.*
+
+<!-- register:critical_path -->
+| Position | Code |
+|----------|------|
 
 ---
 
 ## 3. Artifact Summary
 
-| Count | Action | Description |
-|-------|--------|-------------|
-| — | REPLACE | Artifacts authored through prior pipeline that require re-authoring |
-| — | EXTEND | Existing artifacts receiving new stores or fields |
-| — | NEW | Net-new artifacts |
-| **Total** | | |
+*Authoring action counts, for Stage 8 input. Reconciles against Stage 6b `artifact_summary`.*
+
+<!-- register:mandate_artifact_summary -->
+| Action (REPLACE, EXTEND, NEW) | Count | Description |
+|-------------------------------|-------|-------------|
 
 ---
 
 ## 4. Subdomain Field Declarations
 
-| Artifact Code | Subdomain Field Value |
-|---|---|
+*The `subdomain` field for every WF / CC / EV / RB artifact — governs trace routing and data-store path resolution. `code` is copied verbatim from a Stage 6b register.*
 
-*Subdomain field must be declared for every WF, CC, EV, RB artifact. Governs trace routing and data store path resolution.*
+<!-- register:field_declarations -->
+| Code | Subdomain Field |
+|------|-----------------|
 
 ---
 
-## 5. Cross-Subdomain Dependency Notes
+## 5. Cross-Subdomain Notes
 
-Document any artifacts that make cross-subdomain calls (permitted) or cross-subdomain writes (forbidden).
+*Artifacts that make cross-subdomain calls (permitted) or would write cross-subdomain (forbidden — must be a peer-owned dependency-gap CC). Audit only.*
+
+<!-- register:cross_subdomain_notes optional -->
+| Code | Note |
+|------|------|
 
 ---
 
@@ -78,4 +109,18 @@ Document any artifacts that make cross-subdomain calls (permitted) or cross-subd
 |-------|--------|--------|
 | Stage 6b — Design Intent | design_intent_[subdomain]_v0.md | GATE 1 APPROVED |
 | Stage 7 — Authoring Mandate | This document | PENDING GATE 2 APPROVAL |
-| Stage 8 — Authoring Manifest | Pending | — |
+| Artifact Authoring (authoring tier) | per build_order | PENDING |
+| Stage 8 — Authoring Manifest | post-authoring | PENDING |
+
+---
+
+## gov_projection — Governed Handoff to Artifact Authoring
+
+*The bounded inputs and emit keys mirror the engine's gov_projection schema exactly
+(`contracts/gov_projection.py`). S7 consumes all five Stage 6b registers and emits the four the
+authoring step builds from. Emit keys match the register ids above exactly.*
+
+| Direction | Fields |
+|-----------|--------|
+| **Consumes** ← Stage 6b | new_artifacts · existing_inventory · rb_declarations · execution_topology · artifact_summary |
+| **Emits** → artifact authoring | build_order · critical_path · mandate_artifact_summary · field_declarations |

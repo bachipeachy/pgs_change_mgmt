@@ -1,0 +1,204 @@
+"""Deterministic proof of the STRUCTURED dossier stage (S4) — no live worker.
+
+A stub worker emits register ROWS (structured intent); the engine renders them through the
+DossierStageRenderer and judges them with the structural oracle. Proves: structured-intent →
+renderer → document, the oracle figure of merit, [domain]/[subdomain] substitution, and that
+the handoff persists only the declared emit-fields. Writes to a temp dir.
+
+Run:  PGS_WORKSPACE=/abs python -m pgs_change_mgmt.engine._dossier_structured_selftest
+"""
+
+from __future__ import annotations
+
+import json
+import sys
+import tempfile
+from dataclasses import replace
+from pathlib import Path
+
+from ..contracts import StageInput, StageOutput
+from ..grounding import PiGroundingProvider
+from .dossier import DOSSIER_SEEDS, run_dossier
+
+CLEAN_S4 = {
+    "actors": [{"actor": "Validator", "role": "Proposes/commits blocks", "authority_class": "SYSTEM", "source_finding": "S2-A1"}],
+    "bm_entities": [{"entity": "Block", "description": "Canonical chain record", "store_model": "append-only", "source_finding": "S2-E1"}],
+    "events": [{"event": "Block committed", "trigger": "consensus round closes", "lifecycle_meaning": "state advance", "source_finding": "S2-V1"}],
+    "capability_graph": [{"capability": "Commit a validated block to the canonical chain", "source_finding": "S3-C1", "status": "CRITICAL", "gap_register_entry": "GAP-1", "notes": ""}],
+    "dependency_graph": [{"from": "chain", "to": "consensus_pos", "dependency_type": "event", "pps_status": "SATISFIED", "source_finding": "S3-D1"}],
+    "constraint_register": [{"num": "1", "constraint": "Chain is immutable", "source_finding": "S1-K6", "source": "governance rule"}],
+    "gap_register": [{"gap_code": "GAP-1", "source_finding": "S3-C1", "capability": "Commit block to canonical chain", "owner_subdomain": "chain", "resolution": "NEW"}],
+    "design_decisions": [{"num": "1", "decision": "Attest/Finalize out of scope", "source_finding": "S1-Q5", "rationale": "all blocks treated good", "constraints_imposed": "no finalization gate"}],
+    "authoring_scope": [{"capability": "Commit block to chain", "gap_register_ref": "GAP-1"}],
+}
+
+
+# A clean Stage-6b binding-FQDN set: genesis codes are genuinely new (GENESIS → 0 in the snapshot),
+# every referenced code is declared, spellings are consistent, counts reconcile.
+def _na(cap, fam, code):
+    return {"capability": cap, "family": fam, "code": code, "owner_subdomain": "chain",
+            "status": "NEW", "source_finding": "GAP-1"}
+
+
+CLEAN_6B = {
+    "new_artifacts": [
+        _na("register the genesis block", "WF", "blockchain::WF_REGISTER_GENESIS_BLOCK_V0"),
+        _na("admit a genesis registration", "IN", "blockchain::IN_REGISTER_GENESIS_BLOCK_V0"),
+        _na("bind the genesis workflow", "RB", "blockchain::RB_REGISTER_GENESIS_BLOCK_V0"),
+        _na("write the genesis record", "CC", "blockchain::CC_WRITE_GENESIS_RECORD_V0"),
+        _na("generate the genesis id", "CT", "blockchain::CT_PURE_GENERATE_GENESIS_ID_V0"),
+        _na("emit genesis registered", "EV", "blockchain::EV_GENESIS_REGISTERED_V0"),
+    ],
+    "existing_inventory": [{"fqdn": "blockchain::CC_FORM_BLOCK_V0", "action": "REUSE", "reason": "forms blocks", "source_finding": "S3"}],
+    "rb_declarations": [{"rb_code": "blockchain::RB_REGISTER_GENESIS_BLOCK_V0", "binds_wf": "blockchain::WF_REGISTER_GENESIS_BLOCK_V0", "cs_bindings": "capability_side_effects::CS_MUTABLE_JSON_V0", "storage_structure": "blockchain::STRUCTURE_BLOCKCHAIN_STORAGE_V0", "source_finding": "S6"}],
+    "execution_topology": [
+        {"workflow": "blockchain::WF_REGISTER_GENESIS_BLOCK_V0", "node": "blockchain::IN_REGISTER_GENESIS_BLOCK_V0", "node_type": "IN", "routing": "ACK -> CC_WRITE_GENESIS_RECORD_V0, NACK -> EXIT", "source_finding": "S6b"},
+        {"workflow": "blockchain::WF_REGISTER_GENESIS_BLOCK_V0", "node": "blockchain::CC_WRITE_GENESIS_RECORD_V0", "node_type": "CC", "routing": "SUCCESS -> EXIT_SUCCESS, VIOLATION -> EXIT", "source_finding": "S6b"},
+        {"workflow": "blockchain::WF_REGISTER_GENESIS_BLOCK_V0", "node": "EXIT_SUCCESS", "node_type": "EXIT_SUCCESS", "routing": "-", "source_finding": "S6b"},
+    ],
+    "artifact_summary": [
+        {"action": "NEW", "subdomain": "chain", "count": "6", "artifacts": "WF, IN, RB, CC, CT, EV"},
+    ],
+}
+
+
+class StubStructuredWorker:
+    name = "stub-structured"
+
+    def __init__(self, registers=None):
+        self._registers = registers if registers is not None else CLEAN_S4
+
+    def execute_stage(self, task: StageInput) -> StageOutput:
+        telem = "[tool-loop: iters=3/24 tool_calls=5 reason=finished final_chars=0]"
+        return StageOutput(stage=task.stage, registers=self._registers, findings=(telem,))
+
+
+def main() -> int:
+    grounding = PiGroundingProvider()
+    with tempfile.TemporaryDirectory() as tmp:
+        seed = replace(DOSSIER_SEEDS["blockchain_chain"], output_dir=Path(tmp) / "chain")
+        result = run_dossier(StubStructuredWorker(), grounding, seed, stages=("4",),
+                             runs_root=Path(tmp) / "runs")
+        s = result.stages[0]
+        print(f"  S4 structured={s.structured} ok={s.ok} rating={s.rating}/5 "
+              f"oracle_issues={s.oracle_issues} identity={s.identity}")
+
+        assert s.structured, "S4 should use the structured path"
+        assert s.ok and not s.oracle_issues, f"oracle not clean: {s.oracle_issues}"
+        assert s.rating == 5, f"clean structured stage should rate 5, got {s.rating}"
+
+        md = (Path(tmp) / "chain" / "4_business_model_blockchain_chain_v0.md").read_text()
+        assert "blockchain / chain" in md, "[domain]/[subdomain] not substituted"
+        assert "Commit a validated block to the canonical chain" in md, "register data not rendered"
+        assert "## Document Contract" in md, "template structure not preserved"
+        print("  rendered: template preserved ✓, [domain]/[subdomain] substituted ✓, rows injected ✓")
+
+        hf = json.loads((Path(tmp) / "chain" / "_handoff" / "4.json").read_text())
+        assert "capability_graph" in hf and "resources" not in hf, "handoff != declared emit-fields"
+        print(f"  handoff persisted: {sorted(hf)} (declared emit-fields only — resources/relationships excluded) ✓")
+
+    # ---- Stage 6b: structured binding-FQDN stage + cross-register oracle ----
+    with tempfile.TemporaryDirectory() as tmp:
+        seed = replace(DOSSIER_SEEDS["blockchain_chain"], output_dir=Path(tmp) / "chain")
+        result = run_dossier(StubStructuredWorker(CLEAN_6B), grounding, seed, stages=("6b",),
+                             runs_root=Path(tmp) / "runs")
+        s = result.stages[0]
+        print(f"\n  S6b structured={s.structured} ok={s.ok} rating={s.rating}/5 "
+              f"governed={s.governed_coverage} oracle_issues={s.oracle_issues}")
+        assert s.structured, "S6b should now use the structured path"
+        assert s.ok and not s.oracle_issues, f"clean S6b oracle not clean: {s.oracle_issues}"
+        assert s.rating == 5, f"clean S6b should rate 5, got {s.rating}"
+
+    # ---- Stage 8: structured manifest baseline (the free-form path abandoned with no document) ----
+    CLEAN_8 = {
+        "as_designed_vs_built": [{"concern": "Genesis registration", "as_designed": "blockchain::WF_REGISTER_GENESIS_BLOCK_V0", "as_built": "PENDING", "delta": "PENDING"}],
+        "dividend_metrics": [{"metric": "Mandated authoring actions", "value": "12"}, {"metric": "Conformance status", "value": "PENDING"}],
+        "deviations": [], "discoveries": [], "future_cr_candidates": [],
+    }
+    with tempfile.TemporaryDirectory() as tmp:
+        seed = replace(DOSSIER_SEEDS["blockchain_chain"], output_dir=Path(tmp) / "chain")
+        result = run_dossier(StubStructuredWorker(CLEAN_8), grounding, seed, stages=("8",),
+                             runs_root=Path(tmp) / "runs")
+        s = result.stages[0]
+        print(f"  S8 structured={s.structured} ok={s.ok} rating={s.rating}/5 oracle_issues={s.oracle_issues}")
+        assert s.structured, "S8 should now use the structured path"
+        assert s.ok and s.rating == 5, f"clean S8 baseline should rate 5: {s.oracle_issues}"
+        md = (Path(tmp) / "chain" / "8_authoring_manifest_blockchain_chain_v0.md").read_text()
+        assert md.startswith("# Authoring Manifest") and "| Genesis registration |" in md, "S8 doc not rendered"
+        print("  S8 renders a baseline document (free-form path abandoned this) ✓")
+
+    # ---- Stage 7: structured mandate + cross-stage oracle (codes ⊆ Stage 6b registers) ----
+    _c = "blockchain::"
+    CLEAN_7 = {
+        "build_order": [
+            {"wave": "1", "step": "1", "code": _c + "CT_PURE_GENERATE_GENESIS_ID_V0", "action": "NEW", "subdomain": "chain", "depends_on": "—"},
+            {"wave": "1", "step": "2", "code": _c + "CC_WRITE_GENESIS_RECORD_V0", "action": "NEW", "subdomain": "chain", "depends_on": "—"},
+            {"wave": "2", "step": "3", "code": _c + "IN_REGISTER_GENESIS_BLOCK_V0", "action": "NEW", "subdomain": "chain", "depends_on": "—"},
+            {"wave": "2", "step": "4", "code": _c + "RB_REGISTER_GENESIS_BLOCK_V0", "action": "NEW", "subdomain": "chain", "depends_on": "—"},
+            {"wave": "2", "step": "5", "code": _c + "EV_GENESIS_REGISTERED_V0", "action": "NEW", "subdomain": "chain", "depends_on": "—"},
+            {"wave": "3", "step": "6", "code": _c + "WF_REGISTER_GENESIS_BLOCK_V0", "action": "NEW", "subdomain": "chain", "depends_on": "IN_REGISTER_GENESIS_BLOCK_V0"},
+        ],
+        "critical_path": [{"position": "1", "code": _c + "IN_REGISTER_GENESIS_BLOCK_V0"}, {"position": "2", "code": _c + "WF_REGISTER_GENESIS_BLOCK_V0"}],
+        "mandate_artifact_summary": [{"action": "NEW", "count": "6", "description": "genesis registration cluster"}],
+        "field_declarations": [{"code": _c + "WF_REGISTER_GENESIS_BLOCK_V0", "subdomain_field": "chain"}, {"code": _c + "CC_WRITE_GENESIS_RECORD_V0", "subdomain_field": "chain"}],
+    }
+    with tempfile.TemporaryDirectory() as tmp:
+        seed = replace(DOSSIER_SEEDS["blockchain_chain"], output_dir=Path(tmp) / "chain")
+        hd = Path(tmp) / "chain" / "_handoff"
+        hd.mkdir(parents=True)
+        (hd / "6b.json").write_text(json.dumps({k: CLEAN_6B[k] for k in
+            ("new_artifacts", "existing_inventory", "rb_declarations", "execution_topology", "artifact_summary")}))
+        result = run_dossier(StubStructuredWorker(CLEAN_7), grounding, seed, stages=("7",),
+                             runs_root=Path(tmp) / "runs")
+        s = result.stages[0]
+        print(f"  S7 structured={s.structured} ok={s.ok} rating={s.rating}/5 oracle_issues={s.oracle_issues}")
+        assert s.structured and s.ok and s.rating == 5, f"clean S7 should rate 5: {s.oracle_issues}"
+
+    # ---- Stages 5 & 6: plain-structured (generic oracle: required/traceability/enum/business-language) ----
+    CLEAN_5 = {
+        "scope_boundary": [{"capability": "create the genesis block at bootstrap", "status": "IN_SCOPE", "notes": "once, before the consensus loop", "source_finding": "S4-CAP1"}],
+        "invariants": [{"invariant": "a committed block is immutable", "business_reason": "audit integrity and supply conservation", "source_finding": "S4-C2"}],
+        "actions": [{"action": "REGISTER", "object": "genesis block", "trigger": "bootstrap", "status": "IN_SCOPE", "source_finding": "S4"}],
+        "provisional_codes": [{"provisional_code": "WF_REGISTER_GENESIS_BLOCK_V0", "family": "WF", "summary": "register the genesis block", "source_finding": "S4"}],
+    }
+    CLEAN_6 = {
+        "ownership": [{"capability": "create the genesis block", "owner_subdomain": "chain", "disposition": "OWNED", "existing_artifact": "", "source_finding": "S5"}],
+        "storage_governance": [{"storage_need": "canonical block records", "purpose": "immutable history of committed blocks", "subdomain": "chain", "source_finding": "S5"}],
+    }
+    for stage, regs in (("5", CLEAN_5), ("6", CLEAN_6)):
+        with tempfile.TemporaryDirectory() as tmp:
+            seed = replace(DOSSIER_SEEDS["blockchain_chain"], output_dir=Path(tmp) / "chain")
+            result = run_dossier(StubStructuredWorker(regs), grounding, seed, stages=(stage,),
+                                 runs_root=Path(tmp) / "runs")
+            s = result.stages[0]
+            print(f"  S{stage} structured={s.structured} ok={s.ok} rating={s.rating}/5 oracle_issues={s.oracle_issues}")
+            assert s.structured and s.ok and s.rating == 5, f"clean S{stage} should rate 5: {s.oracle_issues}"
+
+    from ..evaluator.design_intent_oracle import check_authoring_mandate
+    up = {"new_artifacts": CLEAN_6B["new_artifacts"], "existing_inventory": CLEAN_6B["existing_inventory"]}
+    bad7 = {"build_order": [{"step": "1", "code": _c + "CC_WRITE_GENEISIS_RECORD_V0", "action": "NEW"}]}
+    assert any("not in any Stage 6b register" in m for _, m in check_authoring_mandate(bad7, up)), \
+        "S7 cross-stage oracle missed a re-typed code"
+    print("  S7 cross-stage oracle blocks a re-typed code (not in 6b registers) ✓")
+
+    # cross-register oracle catches the GENEISIS-class typo a free-form stage would relay
+    from ..evaluator.design_intent_oracle import check_design_intent
+    typo = {
+        "new_artifacts": [
+            _na("validate predecessor (genesis)", "CC", "blockchain::CC_VALIDATE_PREDECESSOR_LINKAGE_GENEISIS_V0"),
+            _na("write the genesis record", "CC", "blockchain::CC_WRITE_GENESIS_RECORD_V0"),
+            _na("register the genesis block", "WF", "blockchain::WF_REGISTER_GENESIS_BLOCK_V0"),
+        ],
+    }
+    issues = check_design_intent(typo, grounding)
+    assert any("GENEISIS" in m and "near-duplicate" in m for _, m in issues), \
+        f"near-dup oracle missed the GENESIS/GENEISIS typo: {issues}"
+    print("  S6b cross-register oracle catches GENEISIS typo ✓")
+
+    print("\nSTRUCTURED DOSSIER STAGE PROOF OK ✓ — register-intent → renderer → document, "
+          "structural oracle figure of merit, bounded handoff, S6b binding-FQDN integrity")
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())

@@ -9,171 +9,121 @@
 
 ---
 
-## Stage Inputs — Questions for the Human
+## Document Contract
 
-*Answer crisply before drafting. The right column states how the agent uses each answer.*
+**This artifact is a structured register document — not a narrative.** S6 declares the WHERE:
+subdomain ownership, storage governance, cross-subdomain dependencies, and existing artifacts
+needing action. The worker emits register ROWS; a deterministic renderer owns the document.
 
-| # | Question for the Human | How the Agent Uses the Answer (Intent) |
-|---|------------------------|----------------------------------------|
-| 1 | Does this capability stand as its own subdomain, or extend an existing one — and why? | Becomes Section 1 Domain Placement. Subdomain existence is a governance topology declaration; it is never derived from the snapshot. |
-| 2 | Under what authority class do these operations execute (existing ENDUSER/SYSTEM, or a new actor type)? | Becomes Section 2. A new actor type expands the CR scope; reuse must be stated explicitly. |
-| 3 | For each capability that touches a peer subdomain: who should OWN it? | Drives Section 3 ownership tables. A capability that writes a peer's store MUST be owned by that peer (dependency gap) — the human decides whether to accept that ownership split or redesign the boundary. |
-| 4 | Which boundary rules are non-negotiable for this subdomain? | Becomes Section 7 Governance Boundary Rules, the invariants conformance tests will enforce. |
+VALID OUTPUT:
+- Populated register tables (every required register below)
+- Business-language capability / dependency / storage descriptions
+- Existing artifacts cited by exact FQDN in evidence / artifact columns
 
-**Agent execution rules for this stage:**
-- **Cross-subdomain writes are forbidden — no exceptions.** Never mark one "Permitted". The conformant pattern is a dependency-gap CC owned by the store's subdomain, triggered by this CR (Sections 3/9 have a dedicated subsection for this).
-- Cross-subdomain capability calls and data reads are permitted; declare each with explicit direction in Section 6.
-- Existing artifacts are cited by exact FQDN (verified against the snapshot). New capabilities remain business-named here — binding codes are assigned in Stage 6b.
-- Storage ownership follows the dedicated-STRUCTURE precedent: stores exclusively owned by a new subdomain get their own STRUCTURE artifact (see `STRUCTURE_BLOCKCHAIN_ORCHESTRATION_STORAGE_V0`) rather than extending a shared one — confirm the choice either way in Section 5.
+INVALID OUTPUT:
+- Narrative summaries replacing registers
+- A provisional or invented artifact code in a content column (see the discipline below)
+
+A required register with no rows renders as `| NONE IDENTIFIED |`.
 
 ---
 
-## 1. Domain Placement
+### Governance discipline
+
+- **NO provisional artifact codes in this stage** (per the Purity line above). A NEW capability is
+  named in **business language** (e.g. "create the genesis block at bootstrap"); ownership names the
+  owning **subdomain** namespace, never an invented artifact code like `CC_CREATE_GENESIS_BLOCK_V0`.
+  Existing artifacts are still cited by their real FQDN (in `evidence` / `existing_artifact` / `fqdn`
+  columns). Provisional codes were assigned at Stage 5; binding FQDNs are assigned at Stage 6b.
+- **Cross-subdomain writes are forbidden — no exceptions.** A store is written only by CCs of its
+  owning subdomain. If this CR's process requires writing a peer's store, the writing CC is owned by
+  that peer (a dependency gap declared in `cross_subdomain_deps`, Status = GAP).
+- Cross-subdomain capability calls and data reads ARE permitted — declare each with explicit
+  direction in `cross_subdomain_deps`.
+
+---
+
+## Stage Inputs — Questions for the Human
+
+| # | Question for the Human | How the Agent Uses the Answer (Intent) |
+|---|------------------------|----------------------------------------|
+| 1 | Does this capability stand as its own subdomain, or extend an existing one — and why? | Sets Domain Placement (below). Subdomain existence is a governance topology declaration, never derived from the snapshot. |
+| 2 | Under what authority class do these operations execute (existing ENDUSER/SYSTEM, or a new actor type)? | A new actor type expands CR scope; reuse must be stated explicitly. |
+| 3 | For each capability that touches a peer subdomain: who should OWN it? | Drives `ownership` + `cross_subdomain_deps`. A capability that writes a peer's store MUST be owned by that peer. |
+| 4 | Which boundary rules are non-negotiable for this subdomain? | Becomes `boundary_rules`, the invariants conformance tests will enforce. |
+
+---
+
+## Domain Placement (reference)
 
 | Field | Value |
 | --- | --- |
 | Domain | `[domain]` |
-| Primary subdomain | `[subdomain]` |
-| Secondary subdomain | `[subdomain2]` — [NEW / EXISTING], [declared by this CR / existing governed namespace] |
-| FQDN namespace | `[domain]` |
-| [subdomain] status | [EXISTING — declared in PPS namespace topology / NEW — declared by this CR] |
-| [subdomain2] status | [NEW — declared by this CR as a governed subdomain / EXISTING] |
+| Primary subdomain | `[subdomain]` — [NEW — declared by this CR / EXISTING] |
+| Authority class | [reuse existing ENDUSER/SYSTEM / new actor type: name] |
+| Governing constitutions | `fb.constitution::CONSTITUTION_GOVERNANCE_V0`, `fb.topology::CONSTITUTION_WORKFLOW_V0`, `fb.constitution::CONSTITUTION_STRUCTURE_V0` |
 
-*Describe the subdomain placement rationale. If declaring a new subdomain, explain why it stands alone rather than nesting under an existing one. Subdomain existence is a governance topology declaration — not derived from the presence of any artifact in the snapshot.*
+*State the placement rationale in one or two sentences: if declaring a new subdomain, why it stands alone rather than nesting under an existing one.*
 
 ---
 
-## 2. Authority and Governance
+## 1. Subdomain Boundary — Ownership
 
-| Concern | Governing Constitution |
-| --- | --- |
-| Actor authority | `fb.constitution::CONSTITUTION_GOVERNANCE_V0` |
-| Execution topology (WF, IN, CC) | `fb.topology::CONSTITUTION_WORKFLOW_V0`, `fb.topology::CONSTITUTION_INTENT_V0`, `fb.topology::CONSTITUTION_CAPABILITY_CONTRACT_V0` |
-| Storage topology | `fb.constitution::CONSTITUTION_STRUCTURE_V0` |
-| Domain invariants | `[domain]::[INVARIANT_CODE]` |
+*Every capability this CR needs, and who OWNS it. Disposition ∈ OWNED (this subdomain authors it) | SATISFIED (an existing artifact covers it — cite the FQDN in Evidence) | DEFERRED (future CR). `capability` is business language; `owner_subdomain` is a subdomain namespace, never an artifact code.*
 
-*State the authority class under which operations execute. Declare whether a new authority class or actor type is required.*
+<!-- register:ownership business_language=capability -->
+| Capability | Owner Subdomain | Disposition (OWNED, SATISFIED, DEFERRED) | Existing Artifact | Source Finding |
+|------------|-----------------|------------------------------------------|-------------------|----------------|
 
 ---
 
-## 3. Subdomain Boundary
+## 2. Storage Governance Requirements
 
-### Owned by [subdomain] (this CR)
+*What persistent storage the subdomain requires, as a governance requirement — NOT store names or paths (those are Stage 6b). Business language only.*
 
-| Capability | Ownership Decision |
-| --- | --- |
-| [capability] | OWNED |
-
-### Owned by [subdomain2] (new subdomain, declared this CR)
-
-| Capability | Ownership Decision |
-| --- | --- |
-| [capability] | OWNED — `[domain]::[subdomain2]` |
-
-*If subdomain2 is NEW: explain why it is not owned by the primary subdomain. State the cross-subdomain dependency direction explicitly.*
-
-### Satisfied by existing subdomains — no ownership transfer
-
-| Capability | Owned By | PPS Status |
-| --- | --- | --- |
-| [capability] | `[domain]::[existing_subdomain]` | SATISFIED — `[artifact FQDN]` reused |
-
-### Deferred to future CRs — not owned this CR
-
-| Capability | Reason |
-| --- | --- |
-| [capability] | Future CR — [reason] |
+<!-- register:storage_governance business_language=storage_need,purpose -->
+| Storage Need | Purpose | Subdomain | Source Finding |
+|--------------|---------|-----------|----------------|
 
 ---
 
-## 4. Composition — Extension Pattern
+## 3. Cross-Subdomain Dependency Declaration
 
-| Composition Decision | Detail |
-| --- | --- |
-| Domain | [Extend existing / Declare new] `[domain]` domain |
-| Subdomain (primary) | [Extend existing / Declare new] `[subdomain]` namespace |
-| Subdomain (secondary) | [Declare `[subdomain2]` as new governed namespace — if applicable] |
-| Actor types | [Reuse existing / New actor type required: [name]] |
-| Execution substrate | [Reuse existing capability substrate] |
-| [dependency name] dependency | Cross-subdomain [read / capability call] — [capability]; `[domain]::[subdomain]` owned |
-| Storage topology | [Extension required to / No change to] `[STRUCTURE_ARTIFACT_V0]` — see Section 5 |
+*Cross-subdomain calls/reads (permitted) and dependency gaps (a peer must author a capability for this CR). `dependency` is business language; `direction` is `this_subdomain → peer`; `existing_artifact` cites an existing FQDN when reused. Status ∈ SATISFIED (reuse existing) | GAP (new, owned by the peer).*
 
-*Cross-subdomain writes are forbidden — [subdomain] does not write to [other subdomain] stores.*
+<!-- register:cross_subdomain_deps optional business_language=dependency -->
+| Dependency | Direction | Existing Artifact | Status (SATISFIED, GAP) | Source Finding |
+|------------|-----------|-------------------|-------------------------|----------------|
 
 ---
 
-## 5. Storage Governance Requirements
+## 4. PPS Artifacts Requiring Action
 
-*State what persistent storage is required, organized by subdomain governance. Design Intent (Stage 6b) declares actual store names and paths. This section declares the governance requirement, not the implementation.*
+*Existing PPS artifacts that must be reviewed or replaced as part of this CR. `fqdn` is the existing artifact. Action ∈ REPLACE | REVIEW | REUSE.*
 
-**[subdomain] subdomain storage:**
-- [description of storage need] — [purpose]
-- [description of storage need] — [purpose]
-
-**[subdomain2] subdomain storage (if applicable):**
-- [description of storage need] — [purpose]
-- [description of storage need] — [purpose]
+<!-- register:pps_artifacts_requiring_action optional -->
+| FQDN | Current Status | Action (REPLACE, REVIEW, REUSE) | Source Finding |
+|------|----------------|----------------------------------|----------------|
 
 ---
 
-## 6. Cross-Subdomain Dependency Declaration
+## 5. Governance Boundary Rules
 
-| Dependency | Direction | Existing PPS Artifact | Status |
-| --- | --- | --- | --- |
-| [capability] | [subdomain] → [other_subdomain] | `[FQDN or None]` | [SATISFIED — reuse / GAP — new capability required; owned by `[subdomain]`] |
+*Non-negotiable boundary rules for this subdomain — each a governance invariant, not an implementation detail.*
 
----
-
-## 7. Governance Boundary Rules
-
-*Non-negotiable boundary rules for this subdomain. Each rule is a governance invariant, not an implementation detail.*
-
-1. **[Rule name]** — [statement]
-2. **[Rule name]** — [statement]
-3. **[Rule name]** — [statement]
+<!-- register:boundary_rules optional -->
+| Rule Name | Statement | Source Finding |
+|-----------|-----------|----------------|
 
 ---
 
-## 8. PPS Artifacts Requiring Action
+## 6. Governance Outcome
 
-*Existing PPS artifacts that must be reviewed or replaced as part of this CR.*
+*Capabilities requiring protocol realization (Stage 6b assigns the artifact family + binding FQDN). Business language; organized by owning subdomain.*
 
-| Artifact | Current Status | Action |
-| --- | --- | --- |
-| `[domain]::[ARTIFACT_CODE_V0]` | [EXISTS — description] | [REPLACE / REVIEW / REUSE] — [reason] |
-
----
-
-## 9. Governance Outcome
-
-*Capabilities that require protocol realization. Design Intent (Stage 6b) determines which artifact family each maps to and assigns FQDN codes. Organized by subdomain ownership.*
-
-**[subdomain] subdomain:**
-- [capability]
-- [capability]
-
-**[subdomain2] subdomain (if applicable):**
-- [capability]
-- [capability]
-
-**[other_subdomain] subdomain (dependency gap — new capability owned by [other_subdomain], triggered by this CR):**
-- [capability] (cross-subdomain [read/call]; capability owned by [other_subdomain], not [subdomain])
-
----
-
-## 10. Governance Summary
-
-**Key decisions recorded in this document:**
-
-1. [Decision point — domain/subdomain placement]
-2. [Decision point — new subdomain declaration if applicable]
-3. [Decision point — cross-subdomain dependency direction]
-4. [Decision point — authority class]
-5. [Decision point — storage governance]
-6. [Decision point — ownership boundary rules]
-7. [Decision point — deferred capabilities]
-
-*This document is part of the Stage 1–6b iterative session. No per-stage approval gate. All governance decisions here are eligible for amendment as Design Intent (Stage 6b) develops new knowledge. Gate 1 (Design Approval) closes after Stage 6b — the full dossier is reviewed as a body at that point.*
+<!-- register:governance_outcome optional business_language=capability -->
+| Capability | Owner Subdomain | Source Finding |
+|------------|-----------------|----------------|
 
 ---
 
@@ -181,13 +131,23 @@
 
 | Stage | Output | Status |
 |-------|--------|--------|
-| Stage 1 — Change Request & Input Elicitation | change_request_[subdomain]_v0.md | COMPLETE |
-| Stage 2 — Domain Model Discovery | Actors, Entities, Resources, Events, Relationships | COMPLETE |
-| Stage 3 — Analysis Loop | Capability Graph, Dependency Graph, Constraints, Gap Register | COMPLETE — SATURATED |
 | Stage 4 — Business Model | business_model_[subdomain]_v0.md | COMPLETE |
-| Stage 4b — Authoring Scope | IN/FUTURE CR boundary | COMPLETE — APPROVED |
 | Stage 5 — Business Intent | business_intent_[subdomain]_v0.md | COMPLETE |
 | Stage 6 — Governance Intent | This document | COMPLETE |
 | Stage 6b — Design Intent | Pending | — |
-| Stage 7 — Authoring Mandate | Pending | — |
-| Stage 8 — Authoring Manifest | Pending | — |
+
+---
+
+## gov_projection — Governed Handoff to Stage 6b
+
+*The bounded inputs and emit keys mirror the engine's gov_projection schema exactly
+(`contracts/gov_projection.py`). Domain Placement, Boundary Rules (§5), and Governance Outcome (§6)
+are this stage's record; the four emit registers cross to Stage 6b. Emit keys match the register ids
+above exactly.*
+
+| Direction | Fields |
+|-----------|--------|
+| **Consumes** ← Stage 1 | out_of_scope · governance_scope |
+| **Consumes** ← Stage 4 | events · constraint_register · dependency_graph · authoring_scope |
+| **Consumes** ← Stage 5 | scope_boundary · invariants · cross_subdomain_refs |
+| **Emits** → Stage 6b | ownership · storage_governance · cross_subdomain_deps · pps_artifacts_requiring_action |

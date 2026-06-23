@@ -25,8 +25,8 @@
 
 | # | Document | Path (root) | Role | Why the Agent Reads It | Required |
 |---|----------|-------------|------|------------------------|----------|
-| 1 | PGS Field Manual | `doc/pgs_field_manual_v0.md` (workspace) | Primary | Naming conventions, the nine execution concerns, FQDN format, repo ownership, compile-time vs runtime boundary, and §4 the change-management pipeline itself. Read before interpreting any spec or drafting any stage. | **YES** |
-| 2 | Closed-Loop Governed Evolution | `doc/pgs_change_management_conceptual_model_v0.md` (workspace) | Doctrine | The conceptual model for this pipeline: stages, purity ladder, gates, Discovery Saturation, the elicitation contract. This is the doctrine the agent is executing. | **YES** |
+| 1 | PGS Field Manual | `doc/pgs_field_manual_v1.md` (workspace) | Primary | Naming conventions, the nine execution concerns, FQDN format, repo ownership, compile-time vs runtime boundary, and §4 the change-management pipeline itself. Read before interpreting any spec or drafting any stage. | **YES** |
+| 2 | Closed-Loop Governed Evolution | `doc/pgs_change_management_conceptual_model_v1.md` (workspace) | Doctrine | The conceptual model for this pipeline: stages, purity ladder, gates, Discovery Saturation, the elicitation contract. This is the doctrine the agent is executing. | **YES** |
 | 3 | PPS Snapshot Inventory | `pps_snapshot/index.json` (workspace) | Inventory | The full inventory of compiled artifacts — what already exists. The agent MUST check this before proposing any new artifact, to reuse rather than re-author. Load FQDN keys only (`domain::ARTIFACT` entries) to keep context manageable. | **YES** |
 | 4 | Prior & Sibling Dossiers | `change_mgmt/dossiers/<domain>/<subdomain>/` (this repo) | Evidence | The evidence chain of completed CRs in the same domain/subdomain. Establishes the governed baseline this CR modifies — nothing is greenfield. Read peers before declaring entities, gaps, or boundaries. | **YES** |
 | 5 | PGS Conceptual Model | `doc/pgs_conceptual_model_v0.md` (workspace) | Grounding | How artifacts relate, execution flow, governance-layer relationships. Structural mental model before reading specs. | optional |
@@ -51,9 +51,24 @@ Carry forward at each stage:
 - [ ] Re-check the PPS inventory before naming any NEW artifact (reuse beats re-author)
 - [ ] Re-read the change-management paper's gate criteria before Gate 1 (Design Approval) and Gate 2 (Mandate Approval)
 - [ ] Open the relevant stage template immediately before drafting that stage
+- [ ] Re-establish grounding for every NEW claim about an existing artifact at the current stage — grounding is not inherited from prior-stage prose (see below)
+
+---
+
+## Grounding Is Not Inherited (Per-Stage Requirement)
+
+Grounding does not carry forward as narrative. Each stage that introduces a **new claim about an existing artifact** must re-establish that claim *at that stage* against an authoritative source — `pi` inspection or the PPS snapshot — and cite it. A claim verified in an earlier stage is not license to repeat it unverified later; prior-stage prose is not evidence. Legitimate synthesis or consolidation stages that introduce no new claim may cite earlier evidence without re-querying — the requirement targets *new claims*, not query counts.
+
+A newly discovered concern, constraint, assumption, dependency, or gap is confirmed with `pi` before it is promoted into a governed artifact: **discovery may propose; PI authorizes applicability.** This operationalizes constitution rules `GROUNDING_NOT_INHERITED` and `DISCOVERY_FINDINGS_REQUIRE_PI_VALIDATION`.
 
 ---
 
 ## Extending the Assignment
 
 To add a document to the agent's awareness, add a row to the Reading Assignment table — declare its path, role, why it is read, and whether it is required. Awareness is extended by declaration here, never by hardcoding paths into agent logic.
+
+---
+
+## gov_projection — Governed Handoff
+
+Stage 0 consumes no prior stage. It **emits** the *grounding baseline* — reading-assignment completion plus the loaded PPS inventory — consumed by every downstream stage as the evidentiary floor of the `gov_projection` chain. From Stage 1 onward, each stage's `gov_projection` is the governed, lossless handoff it emits to the next: every artifact identity (FQDN or provisional capability name) and concern carried in a consumed field reappears in the emitted field transform-free, unless explicitly deferred with a recorded reason. No field is dropped silently — a dropped identity is a handoff defect, not editorial cleanup. (Field manual §4.7; constitution rules `GROUNDING_NOT_INHERITED`, `CONCERN_TRACEABILITY_REQUIRED`, `IDENTITY_PRESERVING_REFERENCE_VALIDATION`.)

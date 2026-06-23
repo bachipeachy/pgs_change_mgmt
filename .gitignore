@@ -83,3 +83,11 @@ sessions/
 
 # Change management generated outputs — agent output, not compiler output
 change_mgmt/generated/
+
+# Engine run output (audit trails) — written by engine.run(); not source
+engine_runs/
+
+# Dossier checkpoint state — persisted gov_projection handoffs between stages (run state,
+# reviewable locally, regenerated each run); not source. Matches any subdomain's dossier.
+_handoff/
+

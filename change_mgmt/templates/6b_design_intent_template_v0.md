@@ -9,302 +9,150 @@
 
 ---
 
+## Document Contract
+
+**This artifact is a structured register document — not a narrative.** 6b assigns the **binding
+FQDNs** the rest of the build depends on. The worker emits register ROWS; a deterministic renderer
+owns the document and a structural oracle validates the codes BEFORE a human reviews.
+
+VALID OUTPUT:
+- Populated register tables (every required register below)
+- Binding FQDNs in `code` / `rb_code` / `binds_wf` / `storage_structure` columns, each
+  well-formed (`domain::PREFIX_NAME_V<n>`) and assigned EXACTLY ONCE
+- Business-language capability descriptions in the `capability` column
+
+INVALID OUTPUT:
+- Narrative summaries / reasoning essays replacing registers
+- A binding FQDN referenced anywhere (topology, RB) but absent from `new_artifacts`
+- Two spellings of the same capability (a typo is a SECOND immutable artifact, not a synonym)
+
+A required register with no rows MUST render as a single `| NONE IDENTIFIED |` row. The renderer
+rejects a malformed FQDN, an empty required register, an undeclared reference, or a near-duplicate
+code mechanically.
+
+---
+
+### Binding-FQDN discipline (the oracle enforces these)
+
+- **Well-formed:** every assigned code is `domain::PREFIX_NAME_V<n>` (PREFIX ∈ WF/IN/RB/CC/CT/EV/
+  STRUCTURE; explicit `_V0`).
+- **One canonical FQDN per capability — assign it ONCE, reuse the EXACT string everywhere**
+  (topology, pipelines, RB, summary). A binding FQDN is immutable: a spelling/term variant of the
+  same concept (e.g. `GENESIS` vs `GENEISIS`) silently creates a SECOND, permanently-misnamed
+  artifact. Spell domain terms exactly.
+- **Referenced ⇒ declared:** every NEW code that appears in `execution_topology` or
+  `rb_declarations` MUST appear as a row in `new_artifacts`. CTs and EVs are first-class new
+  artifacts — never implicit.
+- **Genuinely new:** an assigned `new_artifacts` code MUST NOT already exist in the snapshot
+  (the oracle collision-checks via grounding). Existing artifacts go in `existing_inventory`.
+- **Reconciled:** the NEW counts in `artifact_summary` MUST equal the rows of `new_artifacts`.
+
+### Business-Language Rule
+
+Only the `capability` column of `new_artifacts` is business language (name the need, not the
+artifact). Every other column legitimately carries FQDNs / controlled tokens — that is where the
+binding codes belong. Existing artifacts are cited by their real FQDN in `fqdn` / source columns.
+
+---
+
 ## Stage Inputs — Questions for the Human
 
 *Answer crisply before drafting. The right column states how the agent uses each answer.*
 
 | # | Question for the Human | How the Agent Uses the Answer (Intent) |
 |---|------------------------|----------------------------------------|
-| 1 | For each open design decision carried from Stages 1–4: which concrete resolution do you choose (store shape, schema fields, algorithm, reuse-vs-new)? | Becomes Section 1. Every row must trace back to a Business Model design decision; new decisions invented here must be flagged as such. |
-| 2 | Where an existing artifact partially fits: REUSE as-is, EXTEND it, or REPLACE it? | Fixes Section 3 actions. REPLACE/EXTEND of shared artifacts affects other subdomains and needs explicit confirmation. |
-| 3 | Do you approve the proposed store names, paths, and key fields? | Locks Section 8 STRUCTURE declarations. Storage topology is a governance concern — paths are declared here, never hardcoded later. |
-| 4 | Gate 1: do you approve the full dossier as the design basis? | Gate 1 approval (Section 12) authorizes Stage 7. Without it, no mandate may be drafted. |
+| 1 | For each open design decision carried from Stages 1–4: which concrete resolution (store shape, schema fields, algorithm, reuse-vs-new)? | Becomes `design_resolution`. Every row traces to a Business Model design decision; new decisions invented here are flagged. |
+| 2 | Where an existing artifact partially fits: REUSE as-is, EXTEND it, or REPLACE it? | Fixes `existing_inventory` actions. REPLACE/EXTEND of shared artifacts affects other subdomains. |
+| 3 | Do you approve the proposed store names, paths, and key fields? | Locks `structure_stores`. Storage topology is a governance concern — paths declared here, never hardcoded later. |
+| 4 | Gate 1: do you approve the full dossier as the design basis? | Gate 1 approval authorizes Stage 7. Without it, no mandate may be drafted. |
 
 **Agent execution rules for this stage (binding FQDNs are assigned here):**
 - Every new artifact maps 1:1 to a Governance Intent outcome; every FQDN carries `_V<n>`.
 - **Workflow nodes are IN, CC, EXIT/EXIT_SUCCESS only.** Sub-workflow invocation = gateway CC bound to `CS_WORKFLOW_GATEWAY_V0` (precedent: `CC_INVOKE_BLOCK_PROPOSAL_V0`). EV_ artifacts are emitted facts, never triggers.
 - A store is written only by CCs of its owning subdomain. Writing CCs for peer stores are declared in the dependency-gap section with peer ownership.
-- Before declaring a new CT or EV: list the existing inventory candidates examined and why each does not fit (the transform vocabulary and event set usually already contain the atom).
-- Verify field-level facts against the compiled artifacts — e.g., what a producing CC actually outputs — not against assumptions. State the source artifact for every consumed field.
-- Artifact Summary counts (Section 11) must equal the rows of Section 4 exactly. Reconcile before completion.
+- Before declaring a new CT or EV: check the existing inventory (the transform vocabulary and event set usually already contain the atom) — if reused, it belongs in `existing_inventory`, not `new_artifacts`.
+- **Module path assignment (reference):** IN→`[repo].registry.[subdomain].intents`, WF→`.workflows`, CC→`.capability_contracts`, CT→`.capability_transforms`, RB→`.runtime_bindings`, STRUCTURE→`.structures`. A missing assignment is a build failure.
 
 ---
 
 ## 1. Design Decisions Resolution
 
-*The Design Decisions Register was populated throughout Stages 1–4. These decisions are resolved here.*
+*The Design Decisions Register populated throughout Stages 1–4 — resolved here. Each row traces to a Business Model design decision (`source_finding`).*
 
-| Decision | Business Fact (Business Model) | Design Resolution |
-| --- | --- | --- |
-| [decision] | "[business fact]" | [concrete design resolution — algorithm, schema field, configuration parameter, etc.] |
-
----
-
-## 2. [Key Store / Schema Design Decision]
-
-*One section per significant design decision that resolves a Governance Intent storage requirement. Name the section after the decision (e.g., "Enrollment Store Decision", "Round Record Schema Decision").*
-
-**Design resolution:** [State the concrete decision — which existing store is reused, or what new store is created, what schema fields are added/changed.]
-
-| Field | Type | Description |
-| --- | --- | --- |
-| [field] | [type] | [description] |
-
-**Consequence:** [State what existing artifacts must change as a result of this decision, if any.]
+<!-- register:design_resolution optional -->
+| Decision | Business Fact | Resolution | Source Finding |
+|----------|---------------|------------|----------------|
 
 ---
 
-## 3. Artifact Inventory — Existing Artifacts
+## 2. Artifact Inventory — Existing Artifacts
 
-*All existing PPS artifacts touched by this CR. Action = REPLACE, REVIEW, REUSE, or EXTEND.*
+*All existing PPS artifacts touched by this CR. Action ∈ REPLACE | REUSE | EXTEND | REVIEW. `fqdn` is the existing artifact, cited by exact FQDN.*
 
-| Artifact | Action | Reason |
-| --- | --- | --- |
-| `[domain]::[ARTIFACT_CODE_V0]` | [REPLACE / REUSE / EXTEND] | [reason] |
-
----
-
-## 4. Artifact Family Mapping — New Artifacts
-
-*Mapping from Governance Outcome capabilities to artifact families, with FQDN codes assigned. Organized by subdomain ownership as declared in Governance Intent.*
-
-### [domain]::[subdomain] — New Artifacts
-
-#### Workflow: [workflow name]
-
-| Artifact | Family | Code | Status |
-| --- | --- | --- | --- |
-| [governing workflow] | WF | `[domain]::[WF_CODE_V0]` | NEW |
-| [admission intent] | IN | `[domain]::[IN_CODE_V0]` | NEW |
-| [runtime binding] | RB | `[domain]::[RB_CODE_V0]` | NEW |
-
-#### Capability Contracts: [pipeline name]
-
-| Capability | Family | Code | Status |
-| --- | --- | --- | --- |
-| [capability] | CC | `[domain]::[CC_CODE_V0]` | NEW |
-
-#### Capability Transforms: [purpose]
-
-| Capability | Family | Code | Status |
-| --- | --- | --- | --- |
-| [pure computation] | CT | `[domain]::[CT_CODE_V0]` | NEW |
-
-#### Events: [lifecycle name]
-
-| Event | Family | Code | Status |
-| --- | --- | --- | --- |
-| [event] | EV | `[domain]::[EV_CODE_V0]` | NEW |
+<!-- register:existing_inventory -->
+| FQDN | Action (REPLACE, REUSE, EXTEND, REVIEW) | Reason | Source Finding |
+|------|------------------------------------------|--------|----------------|
 
 ---
 
-### [domain]::[subdomain2] — New Artifacts (New Subdomain Established This CR)
+## 3. Artifact Family Mapping — New Artifacts
 
-*If this CR establishes a new subdomain, list artifacts that carry that subdomain's ownership here. State why these are authored now despite belonging to the new subdomain.*
+*Each Governance Outcome capability mapped to an artifact family with a binding FQDN assigned.
+`capability` is business language; `code` is the binding FQDN; `family` is the execution concern;
+`owner_subdomain` is the owning subdomain; `source_finding` traces to the S6 ownership / S4 gap.*
 
-| Artifact | Family | Code | Status |
-| --- | --- | --- | --- |
-| [capability] | CC | `[domain]::[CC_CODE_V0]` | NEW — subdomain: [subdomain2] |
-| [event] | EV | `[domain]::[EV_CODE_V0]` | NEW — subdomain: [subdomain2] |
-
----
-
-### [domain]::[dependency_subdomain] — Dependency Gap (Owned by [dependency_subdomain], Triggered by This CR)
-
-*If a gap in a peer subdomain is triggered by this CR, declare the new artifact here. Ownership stays with the peer subdomain.*
-
-| Capability | Family | Code | Status |
-| --- | --- | --- | --- |
-| [capability] | CC | `[domain]::[CC_CODE_V0]` | NEW — subdomain: [dependency_subdomain] |
+<!-- register:new_artifacts business_language=capability -->
+| Capability | Family (AC, IN, WF, RB, CC, CT, EV, STRUCTURE) | Code | Owner Subdomain | Status | Source Finding |
+|------------|------------------------------------------------|------|-----------------|--------|----------------|
 
 ---
 
-## 4b. Module Path Assignments
+## 4. Runtime Binding (RB) Declarations
 
-*Every new artifact family gets a module path in its owning repository. The compiler resolves registry artifacts from these paths — a missing assignment is a build failure.*
+*One RB per WF. The RB declares which CS substrates the WF requires and which storage structure resolves store paths. An undeclared CS binding is a runtime failure. `cs_bindings` may list several CS FQDNs (comma-separated).*
 
-| Artifact Family | Module Path |
-|----------------|-------------|
-| IN | `[repo].registry.[subdomain].intents` |
-| WF | `[repo].registry.[subdomain].workflows` |
-| CC | `[repo].registry.[subdomain].capability_contracts` |
-| CT | `[repo].registry.[subdomain].capability_transforms` |
-| RB | `[repo].registry.[subdomain].runtime_bindings` |
-| STRUCTURE | `[repo].registry.[subdomain].structures` |
-| Implementation | `[repo].implementation.[subdomain]` |
+<!-- register:rb_declarations -->
+| RB Code | Binds WF | CS Bindings | Storage Structure | Source Finding |
+|---------|----------|-------------|-------------------|----------------|
 
 ---
 
-## 4c. Runtime Binding (RB) Declarations
+## 5. Execution Topology
 
-*One RB per WF. The RB declares which CS substrates the WF requires and which storage structure resolves store paths. An undeclared CS binding is a runtime failure.*
+*The DAG flattened to one row per node, in execution order, per workflow. `node` is an IN/CC binding FQDN or a terminal (EXIT / EXIT_SUCCESS); `routing` states the outcome→target edges in business status names (SUCCESS, NOT_FOUND, ALREADY_EXISTS, VIOLATION, BACKEND_ERROR).*
 
-### `[domain]::[RB_CODE_V0]`
-
-Binds `[WF_CODE_V0]`.
-
-| CS Binding | Role in WF |
-|-----------|-----------|
-| `capability_side_effects::[CS_CODE_V0]` | [which CC uses it, for what store or gateway call] |
-
-**storage_structure:** `[domain]::[STRUCTURE_ARTIFACT_V0]`
-
-*Repeat per RB.*
+<!-- register:execution_topology -->
+| Workflow | Node | Node Type (IN, CC, EXIT, EXIT_SUCCESS) | Routing | Source Finding |
+|----------|------|----------------------------------------|---------|----------------|
 
 ---
 
-## 5. Execution Topology — [WF_CODE_V0]
+## 6. STRUCTURE Stores
 
-*High-level DAG. JSONPath input bindings are authoring-phase detail.*
+*New entity stores. `storage_type` selects the CS substrate; `proposed_path` is the declared store path (governance concern — never hardcoded later); `used_by` names the writing CC (its owning subdomain only).*
 
-```
-[IN_CODE_V0]
-    ACK  → [CC_CODE_1_V0]
-    NACK → EXIT
-
-[CC_CODE_1_V0]                  ← [subdomain]
-    SUCCESS       → [CC_CODE_2_V0]
-    [outcome]     → EXIT
-    VIOLATION     → EXIT
-    BACKEND_ERROR → EXIT
-
-[CC_CODE_2_V0]                  ← [subdomain]
-    SUCCESS       → [CC_CODE_3_V0]
-    [outcome]     → EXIT
-    VIOLATION     → EXIT
-
-...
-
-EXIT
-```
-
-**Path summary:**
-- [path name] path: [condition] → [steps] → EXIT
-- [path name] path: [condition] → [steps] → EXIT
-- Short-circuit exits: [conditions]
-
-**Cross-subdomain calls in this WF:** [list any cross-subdomain CC calls and ownership statement]
+<!-- register:structure_stores optional -->
+| Store Name | Storage Type (CS_APPENDONLY_JSONL_V0, CS_MUTABLE_JSON_V0) | Proposed Path | Used By | Source Finding |
+|------------|-----------------------------------------------------------|---------------|---------|----------------|
 
 ---
 
-## 6. CC Pipeline Declarations (Summary)
+## 7. Artifact Summary
 
-*Design-level pipeline intent for each new CC. Full JSONPath bindings are authoring-phase detail. Grouped by subdomain ownership.*
+*Artifact count by action type, for Stage 7 input. The oracle reconciles: the NEW counts here MUST equal the rows of `new_artifacts`. `artifacts` lists the codes for that action.*
 
-### [subdomain] Pipelines
-
-**[CC_CODE_V0]** *([subdomain])*
-- Step 1: [CS or CT code] — [operation] — [store or input] → [output]
-- Step 2: [CS or CT code] — [operation] — [store or input] → [output]
-- Result statuses: `SUCCESS`, `VIOLATION`, `BACKEND_ERROR` [add domain-specific statuses: NOT_FOUND, EMPTY, ALREADY_EXISTS, etc.]
-- *[Any cross-subdomain boundary notes]*
+<!-- register:artifact_summary -->
+| Action (REPLACE, EXTEND, NEW) | Subdomain | Count | Artifacts |
+|-------------------------------|-----------|-------|-----------|
 
 ---
 
-### [subdomain2] Pipelines
+## Gate 1 — Design Approval
 
-**[CC_CODE_V0]** *([subdomain2])*
-- Step 1: [CS or CT code] — [operation] — [store or input] → [output]
-- Result statuses: `SUCCESS`, `VIOLATION`, `BACKEND_ERROR`
-- *[Boundary note: all writes are within [subdomain2] stores]*
-
----
-
-## 7. Execution Topology — [WF_CODE_V0] (Re-authored, if applicable)
-
-*If an existing WF is being re-authored (REPLACE), declare its topology here. State what changes from the flawed or prior version.*
-
-```
-[IN_CODE_V0]       ← [REPLACE / REUSE]: [reason]
-    ACK  → [CC_CODE_V0]
-    NACK → EXIT
-
-...
-
-EXIT
-```
-
-**Change from existing:** [Describe what topology or schema changes, and what stays the same.]
-
----
-
-## 8. STRUCTURE Extension — [STRUCTURE_ARTIFACT_V0]
-
-*New entity stores to be added to the existing structure artifact. Organized by subdomain governance.*
-
-**[subdomain] subdomain stores:**
-
-| Store Name | Storage Type | Proposed Path | Used By |
-| --- | --- | --- | --- |
-| [STORE_NAME] | [CS_APPENDONLY_JSONL_V0 / CS_MUTABLE_JSON_V0] | `[domain]/[subdomain]/[path/file]` | [CC_CODE_V0] |
-
-**[subdomain2] subdomain stores (new subdomain):**
-
-| Store Name | Storage Type | Proposed Path | Used By |
-| --- | --- | --- | --- |
-| [STORE_NAME] | [CS_APPENDONLY_JSONL_V0 / CS_MUTABLE_JSON_V0] | `[domain]/[subdomain2]/[path/file]` | [CC_CODE_V0] |
-
-*Cross-subdomain write rule: [subdomain] CCs write only to [subdomain] stores. [subdomain2] CCs write only to [subdomain2] stores. No subdomain writes to another's stores.*
-
----
-
-## 9. [CT_CODE_V0] — New Capability Transform (one section per new CT)
-
-| Field | Value |
-| --- | --- |
-| Code | `[domain]::[CT_CODE_V0]` |
-| Family | CT |
-| Purity | ct_pure — no side effects |
-| Operation | [OPERATION_NAME] |
-| Inputs | `[input_name]` ([type]), `[input_name]` ([type]) |
-| Output | `[output_name]` ([type]) |
-| Algorithm | [Concrete algorithm description] |
-| Failure | VIOLATION if [condition] |
-
----
-
-## 10. [IN_CODE_V0] — Intent Schema (one section per new IN)
-
-| Field | Type | Required | Description |
-| --- | --- | --- | --- |
-| [field] | [type] | YES / NO | [description] |
-
-Outcomes: `ACK` (payload valid, proceed), `NACK` (payload invalid, reject)
-
----
-
-## 11. Artifact Summary
-
-*Artifact count by action type, for Stage 7 (Authoring Mandate) input.*
-
-| Action | Count | Notes |
-| --- | --- | --- |
-| REPLACE | [n] | [artifact list] |
-| EXTEND | [n] | [artifact list — e.g., STRUCTURE: adds N new stores] |
-| NEW ([subdomain]) | [n] | [WF, IN, RB, CC×n, CT×n, EV×n] |
-| NEW ([subdomain2]) | [n] | [CC×n, EV×n] |
-| NEW ([dependency_subdomain]) | [n] | [CC×n] |
-| **Total** | **[n]** | |
-
-*Build dependency order is the output of Protocol Stage 7 — Authoring Mandate.*
-
----
-
-## 12. Gate 1 — Design Approval
-
-**Gate 1 closes here.** The full dossier (Stages 0–6b) is presented for review as a body. Any prior-stage artifact that was amended during the Stage 6–6b session is included in this review. This is not a per-stage approval — it is a unified review of the complete design.
-
-**Key design decisions to confirm at Gate 1:**
-
-1. [Key design decision — store/schema choice]
-2. [Key design decision — algorithm or topology choice]
-3. [Key design decision — cross-subdomain call pattern]
-4. [Key design decision — reuse vs. replace artifact decision]
-5. [Key design decision — artifact family assignment]
-6. [Key design decision — new CT scope]
-7. [Summary: N authoring actions total: N REPLACE, N EXTEND, N NEW]
-
-*Gate 1 approval authorizes authoring of Stage 7 — Authoring Mandate. After Gate 1, the dossier (Stages 0–6b) is considered the approved design basis. Gate 2 (Mandate Approval, after Stage 7) locks the full dossier before artifact authoring begins.*
+**Gate 1 closes here.** The full dossier (Stages 0–6b) is presented for review as a body. Any
+prior-stage artifact amended during the Stage 6–6b session is included. This is a unified review of
+the complete design, not a per-stage approval. Gate 1 approval authorizes Stage 7 — Authoring
+Mandate. Gate 2 (after Stage 7) locks the full dossier before artifact authoring begins.
 
 ---
 
@@ -316,9 +164,25 @@ Outcomes: `ACK` (payload valid, proceed), `NACK` (payload invalid, reject)
 | Stage 2 — Domain Model Discovery | Actors, Entities, Resources, Events, Relationships | COMPLETE |
 | Stage 3 — Analysis Loop | Capability Graph, Dependency Graph, Constraints, Gap Register | COMPLETE — SATURATED |
 | Stage 4 — Business Model | business_model_[subdomain]_v0.md | COMPLETE |
-| Stage 4b — Authoring Scope | IN/FUTURE CR boundary | COMPLETE — APPROVED |
 | Stage 5 — Business Intent | business_intent_[subdomain]_v0.md | COMPLETE |
 | Stage 6 — Governance Intent | governance_intent_[subdomain]_v0.md | COMPLETE — APPROVED |
 | Stage 6b — Design Intent | This document | PENDING GATE 1 APPROVAL |
 | Stage 7 — Authoring Mandate | Pending | — |
 | Stage 8 — Authoring Manifest | Pending | — |
+
+---
+
+## gov_projection — Governed Handoff to Stage 7
+
+*The bounded inputs and emit keys mirror the engine's gov_projection schema exactly
+(`contracts/gov_projection.py`). 6b is the binding stage — it consumes the full design context
+(S2 attribute/step data, S4 gaps/decisions, S5 intent + provisional codes, S6 placement) and emits
+the five registers S7 builds from. Emit keys match the register ids above exactly.*
+
+| Direction | Fields |
+|-----------|--------|
+| **Consumes** ← Stage 2 | entity_attributes · process_steps |
+| **Consumes** ← Stage 4 | gap_register · design_decisions · authoring_scope |
+| **Consumes** ← Stage 5 | scope_boundary · invariants · actions · provisional_codes |
+| **Consumes** ← Stage 6 | ownership · storage_governance · cross_subdomain_deps · pps_artifacts_requiring_action |
+| **Emits** → Stage 7 | new_artifacts · existing_inventory · rb_declarations · execution_topology · artifact_summary |
