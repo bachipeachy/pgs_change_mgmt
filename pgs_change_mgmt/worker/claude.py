@@ -2,27 +2,25 @@
 
 (`worker/__init__.py`: "A second worker (Claude, GPT, a human analyst) is an addition here,
 never a refactor.") This is that addition. It exists for one purpose: a controlled A/B against
-`QwenWorker` — *is the dossier pipeline hard to execute (design problem), or is the local qwen
+`OllamaWorker` — *is the dossier pipeline hard to execute (design problem), or is the local qwen
 under-powered (worker problem)?* To make the comparison clean, this worker is a true drop-in:
 
   * SAME bounded task — it receives only the `StageInput` the engine builds (objective + the
     template + the upstream handoff). A programmatic worker has no ambient context: no CLAUDE.md,
-    no auto-memory, no skills. The only thing it sees is what the engine sends — so there is
-    nothing to "wipe" for a pristine run.
-  * SAME system prompt, task framing, and output parsing — reused verbatim from `QwenWorker`
-    (`SYSTEM_PROMPT`, `_render_task`, `_parse_output`, `_result_size`). The contract the worker
-    must satisfy is byte-identical to qwen's.
-  * SAME grounded tool-loop shape, SAME `max_iters` budget, SAME `on_event` telemetry, SAME
-    convergence guard. Only the transport (Anthropic Messages API) and the model differ.
+    no auto-memory, no skills. The only thing it sees is what the engine sends.
+  * SAME system prompt, task framing, output parsing — reused verbatim from `OllamaWorker`
+    (`SYSTEM_PROMPT`, `_render_task`, `_parse_output`).
+  * SAME grounded tool-loop — literally the shared `_loop.run_tool_loop` (budget, convergence
+    guard, forced-finalization contract, telemetry). Only the transport (Anthropic Messages API)
+    and the model differ — that is the whole point of a worker.
 
 What it deliberately does NOT control: parametric capability. Claude is a far stronger base
 model than `qwen3.5:latest`; that confound is unremovable and is the whole point — this measures
 the *ceiling* a capable worker reaches on the same contract.
 
 Transport is raw HTTP via stdlib `urllib` (the workspace forbids `pip install`, and the
-`anthropic` SDK is not present). Model defaults to `claude-opus-4-8` with adaptive thinking —
-the strongest config, since this is a ceiling test. `ANTHROPIC_API_KEY` must be in the
-environment at run time (the worker has no key baked in).
+`anthropic` SDK is not present). Model defaults to `claude-opus-4-8` with adaptive thinking.
+`ANTHROPIC_API_KEY` must be in the environment at run time (the worker has no key baked in).
 """
 
 from __future__ import annotations
@@ -36,8 +34,9 @@ from typing import Any, Callable
 
 from ..contracts import StageInput, StageOutput
 from ..contracts import GroundingProvider
-from ..grounding import TOOL_SCHEMAS, PiError
-from .qwen import QwenWorker, SYSTEM_PROMPT
+from ..grounding import TOOL_SCHEMAS
+from ._loop import ToolCall, Turn, TransportError, run_tool_loop
+from .ollama_worker import OllamaWorker, SYSTEM_PROMPT
 
 ANTHROPIC_URL = "https://api.anthropic.com/v1/messages"
 ANTHROPIC_VERSION = "2023-06-01"
@@ -60,10 +59,50 @@ class ClaudeError(RuntimeError):
     """Anthropic transport failure (non-retryable, or retries exhausted)."""
 
 
+class AnthropicTransport:
+    """`_loop.Transport` for Claude over the Anthropic Messages API — owns the native block history.
+
+    Normalizes Anthropic content-block turns (`text` / `tool_use`, `stop_reason`) into a `Turn`, and
+    translates the loop's `ToolCall` results back into a `tool_result` user message. The assistant
+    turn (thinking + tool_use blocks) is carried back verbatim so a thinking-enabled tool loop
+    continues correctly.
+    """
+
+    def __init__(self, chat: "Callable[..., dict[str, Any]]", task_text: str) -> None:
+        self._chat = chat   # ClaudeWorker._chat (system prompt + credentials + config live there)
+        self.messages: list[dict[str, Any]] = [{"role": "user", "content": task_text}]
+
+    def model_turn(self, *, use_tools: bool) -> Turn:
+        try:
+            msg = self._chat(self.messages, use_tools=use_tools)
+        except ClaudeError as exc:
+            raise TransportError(str(exc)) from exc
+        blocks = msg.get("content") or []
+        stop = msg.get("stop_reason")
+        tool_uses = [b for b in blocks if b.get("type") == "tool_use"]
+        text = "".join(b.get("text", "") for b in blocks if b.get("type") == "text").strip()
+        active = stop == "tool_use" and bool(tool_uses)
+        if active:
+            # preserve the assistant turn verbatim — thinking + tool_use blocks must be carried
+            # back unmodified for the API to continue a thinking-enabled tool loop.
+            self.messages.append({"role": "assistant", "content": blocks})
+        tool_calls = ([ToolCall(id=tu.get("id"), name=tu.get("name", ""), args=tu.get("input") or {})
+                       for tu in tool_uses] if active else [])
+        return Turn(text=text, tool_calls=tool_calls, truncated=(stop == "max_tokens"))
+
+    def add_tool_results(self, calls: list[ToolCall]) -> None:
+        self.messages.append({"role": "user", "content": [
+            {"type": "tool_result", "tool_use_id": call.id, "content": json.dumps(call.payload)}
+            for call in calls]})
+
+    def add_user(self, text: str) -> None:
+        self.messages.append({"role": "user", "content": text})
+
+
 class ClaudeWorker:
     """`contracts.Worker` backed by Claude over the Anthropic Messages API, grounded by PI.
 
-    A drop-in twin of `QwenWorker` for A/B: identical contract, identical loop shape, identical
+    A drop-in twin of `OllamaWorker` for A/B: identical contract, identical (shared) loop, identical
     telemetry — only the model and transport change.
     """
 
@@ -78,8 +117,8 @@ class ClaudeWorker:
         api_key: str | None = None,
         effort: str = "high",
         # S3 (analysis loop) spends heavily on adaptive-thinking tokens, which count toward
-        # max_tokens; 16000 truncated its final register block (the only reason the S3 A/B was
-        # inconclusive). 32000 gives thinking + the largest register payload room to complete.
+        # max_tokens; 16000 truncated its final register block. 32000 gives thinking + the largest
+        # register payload room to complete.
         max_tokens: int = 32000,
         timeout: float = 900.0,
     ) -> None:
@@ -103,12 +142,13 @@ class ClaudeWorker:
         if self.on_event is not None:
             self.on_event(kind, **fields)
 
-    # ---- the bounded stage task (mirrors QwenWorker.execute_stage exactly) ------
+    # ---- the bounded stage task (shared loop; only the transport is Claude's) ------
 
     def execute_stage(self, task: StageInput) -> StageOutput:
-        messages = [{"role": "user", "content": QwenWorker._render_task(task)}]
-        final_text, telem = self._agent_loop(messages)
-        registers, questions, findings = QwenWorker._parse_output(final_text)
+        transport = AnthropicTransport(self._chat, OllamaWorker._render_task(task))
+        final_text, telem = run_tool_loop(
+            transport, self.grounding, max_iters=self.max_iters, emit=self._emit)
+        registers, questions, findings = OllamaWorker._parse_output(final_text)
         telem_line = (f"[tool-loop: iters={telem['iters']}/{self.max_iters} "
                       f"tool_calls={telem['tool_calls']} reason={telem['reason']} "
                       f"final_chars={len(final_text)}]")
@@ -164,86 +204,3 @@ class ClaudeWorker:
         if not use_tools:
             body["tool_choice"] = {"type": "none"}   # forced final turn — no more tools
         return self._post(body)
-
-    # ---- the grounded tool-loop (same shape as QwenWorker._agent_loop) ----
-
-    def _agent_loop(self, messages: list[dict[str, Any]]) -> tuple[str, dict[str, Any]]:
-        final = ""
-        reason = "max_iters"
-        tool_calls = 0
-        seen: set[str] = set()
-        chat_errors = 0
-        i = 0
-        while i < self.max_iters:
-            i += 1
-            try:
-                msg = self._chat(messages, use_tools=True)
-            except ClaudeError as exc:
-                chat_errors += 1
-                self._emit("model_error", attempt=chat_errors, error=str(exc))
-                if chat_errors <= 2:
-                    i -= 1
-                    continue
-                reason = "model_error"
-                break
-
-            blocks = msg.get("content") or []
-            stop = msg.get("stop_reason")
-            tool_uses = [b for b in blocks if b.get("type") == "tool_use"]
-            text = "".join(b.get("text", "") for b in blocks if b.get("type") == "text").strip()
-
-            if stop != "tool_use" or not tool_uses:
-                final = text
-                # surface a truncated turn so an empty/short authoring is diagnosable
-                reason = "finished" if stop != "max_tokens" else "finished_truncated"
-                break
-
-            # preserve the assistant turn verbatim — thinking + tool_use blocks must be carried
-            # back unmodified for the API to continue a thinking-enabled tool loop.
-            messages.append({"role": "assistant", "content": blocks})
-            results = []
-            for tu in tool_uses:
-                name = tu.get("name", "")
-                args = tu.get("input") or {}
-                tool_calls += 1
-                sig = f"{name}({json.dumps(args, sort_keys=True)})"
-                is_repeat = sig in seen
-                seen.add(sig)
-                try:
-                    payload: Any = self.grounding.query(name, **args)
-                    err = None
-                    n_results = QwenWorker._result_size(payload)
-                except (PiError, KeyError, TypeError) as exc:
-                    payload = {"error": str(exc)}
-                    err = str(exc)
-                    n_results = 0
-                flag = "red" if err else ("yellow" if (n_results == 0 or is_repeat) else "green")
-                self._emit("tool_call", name=name, args=args, ok=err is None,
-                           n_results=n_results, repeat=is_repeat, error=err, flag=flag)
-                results.append({
-                    "type": "tool_result",
-                    "tool_use_id": tu.get("id"),
-                    "content": json.dumps(payload),
-                })
-            messages.append({"role": "user", "content": results})
-
-        # Convergence guard: budget exhausted without a final answer. Force ONE tool-free turn.
-        if not final:
-            messages.append({
-                "role": "user",
-                "content": "You have used your full tool budget — do NOT call any more tools. "
-                           "Using only the evidence already gathered, write your final answer "
-                           "now (the completed document, then the single ```json result block).",
-            })
-            try:
-                msg = self._chat(messages, use_tools=False)
-                forced = "".join(b.get("text", "") for b in (msg.get("content") or [])
-                                 if b.get("type") == "text").strip()
-            except ClaudeError:
-                forced = ""
-            self._emit("convergence_forced", produced=bool(forced))
-            if forced:
-                final = forced
-                reason = "finished_forced"
-
-        return final, {"iters": i, "tool_calls": tool_calls, "reason": reason}

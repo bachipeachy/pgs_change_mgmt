@@ -63,6 +63,12 @@ A newly discovered concern, constraint, assumption, dependency, or gap is confir
 
 ---
 
+## Declared Holes — `UNRESOLVED` (no undisposed inference)
+
+When a **required** register cell has no basis in the seed (human truth) and none in the grounded snapshot — you genuinely cannot derive it — write the single token `UNRESOLVED` in that cell and explain why it is open in that row's Source Finding. **Never fabricate a value; never leave a required cell blank.** A declared hole is a governed gap a human will resolve later; a silent guess is a violation. The agent's job here is to *detect* the gap, not to *fill* it. Use this sparingly — only for irreducible business knowledge you were not given.
+
+---
+
 ## Extending the Assignment
 
 To add a document to the agent's awareness, add a row to the Reading Assignment table — declare its path, role, why it is read, and whether it is required. Awareness is extended by declaration here, never by hardcoding paths into agent logic.

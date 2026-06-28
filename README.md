@@ -1,3 +1,6 @@
+w
+in test
+
 # pgs_change_mgmt
 
 **Governed SDLC change-management pipeline for Protocol-Governed Systems.**
@@ -22,8 +25,8 @@ register") before a human ever reviews it. The dossier pipeline **ends at Stage 
 Mandate); protocol-artifact authoring and the Stage 8 manifest happen *after* Gate 2 (see
 [After Stage 7](#after-stage-7--author-compile-test-close)).
 
-Repos version independently; the compatible component set is declared in the `pgs_workspace`
-manifest (`manifest.json → pgs_release`).
+Each component repo versions independently (MAJOR.MINOR.PATCH); the authoritative version is each
+repo's own `pyproject.toml`. There is no single PGS release version.
 
 ---
 

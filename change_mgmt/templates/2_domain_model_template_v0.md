@@ -121,6 +121,18 @@ from a pattern — seeing `APPEND_TX_EVENT` + `APPEND_VALIDATOR_EVENT` does NOT 
 
 ---
 
+### Release Boundary (out_of_scope is a hard fence)
+
+`out_of_scope` (S1 §12) is the human's explicit release boundary. A capability, process, or gap
+named there is **deferred to a future CR and is NOT a candidate for modeling here.** Do not list a
+deferred item as a Business Process, an in-scope Capability, or a CRITICAL Gap. You MAY note that it
+is deferred (in business language, MINOR severity) — but never model it as in-scope work. The oracle
+rejects a modeled-capability row that names a deferred item. Likewise, honor `business_invariants`,
+`constraints`, and `authority_boundaries` — a value the human governed in S1 is a **SEED** fact, not
+something to re-derive as an `OBSERVED` snapshot guess.
+
+---
+
 ## 1. Business Entities
 
 *Confirm/map the Stage-1 Business Vocabulary against the snapshot — these are the inherited
@@ -236,5 +248,5 @@ business | governance | identity | workflow | storage | policy | unknown.*
 
 | Direction | Fields |
 |-----------|--------|
-| **Consumes** ← Stage 1 | business_vocabulary · known_facts · system_beliefs · lifecycle_states · business_events · governance_scope |
+| **Consumes** ← Stage 1 | business_vocabulary · known_facts · system_beliefs · lifecycle_states · business_events · governance_scope · out_of_scope · constraints · business_invariants · authority_boundaries |
 | **Emits** → Stage 3 | entities · entity_attributes · business_processes · process_steps · belief_verification · pps_baseline_fqdns · gaps · architectural_observations · discovery_concerns · open_questions |

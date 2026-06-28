@@ -59,12 +59,19 @@ work. `code` is copied verbatim from a Stage 6b register; `depends_on` lists pre
 <!-- register:build_order -->
 | Wave | Step | Code | Action (REPLACE, EXTEND, NEW) | Subdomain | Depends On |
 |------|------|------|-------------------------------|-----------|------------|
-| 1 | 1 | blockchain::AC_GENESIS_BOOTSTRAP_AUTHORITY_V0 | NEW | blockchain/chain | -- |
-| 1 | 2 | blockchain::CC_ENFORCE_SUPPLY_CONSERVATION_POST_GENESIS_V0 | NEW | blockchain/chain | blockchain::AC_GENESIS_BOOTSTRAP_AUTHORITY_V0 |
-| 2 | 3 | blockchain::IN_BLOCK_PROPOSED_TO_CANONICAL_CHAIN_V0 | NEW | blockchain/chain | -- |
-| 2 | 4 | blockchain::IN_ROUND_SKIPPED_NO_ELIGIBLE_PROPOSER_V0 | NEW | blockchain/chain | -- |
-| 3 | 5 | blockchain::WF_COMMIT_BLOCK_AFTER_CONSENSUS_ROUND_V0 | NEW | blockchain/chain | -- |
-| 3 | 6 | blockchain::CC_COMMIT_BLOCK_TO_CANONICAL_CHAIN_V0 | NEW | blockchain/chain | -- |
+| 1 | 1 | blockchain::STRUCTURE_BLOCKCHAIN_STORAGE_V0 | EXTEND | chain | - |
+| 1 | 2 | blockchain::CT_PURE_HASH_BLOCK_V0 | NEW | chain | - |
+| 1 | 3 | capability_transforms::CT_PURE_COMPARE_EQUAL_V0 | NEW | capability_transforms | - |
+| 1 | 4 | blockchain::EV_GENESIS_CREATED_V0 | NEW | chain | - |
+| 2 | 5 | blockchain::CC_VALIDATE_PREDECESSOR_LINK_V0 | NEW | chain | CT_PURE_COMPARE_EQUAL_V0 |
+| 2 | 6 | blockchain::CC_COMMIT_BLOCK_CANONICAL_V0 | NEW | chain | CT_PURE_HASH_BLOCK_V0 |
+| 2 | 7 | blockchain::CC_CREATE_GENESIS_BLOCK_V0 | NEW | chain | - |
+| 3 | 8 | blockchain::IN_COMMIT_BLOCK_V0 | NEW | chain | - |
+| 3 | 9 | blockchain::IN_BOOTSTRAP_GENESIS_CHAIN_V0 | NEW | chain | - |
+| 4 | 10 | blockchain::WF_COMMIT_BLOCK_V0 | NEW | chain | IN_COMMIT_BLOCK_V0 |
+| 4 | 11 | blockchain::WF_BOOTSTRAP_GENESIS_CHAIN_V0 | NEW | chain | IN_BOOTSTRAP_GENESIS_CHAIN_V0 |
+| 5 | 12 | blockchain::RB_COMMIT_BLOCK_V0 | NEW | chain | WF_COMMIT_BLOCK_V0 |
+| 5 | 13 | blockchain::RB_BOOTSTRAP_GENESIS_CHAIN_V0 | NEW | chain | WF_BOOTSTRAP_GENESIS_CHAIN_V0 |
 
 ---
 
@@ -76,12 +83,10 @@ critical path.*
 <!-- register:critical_path -->
 | Position | Code |
 |----------|------|
-| 1 | blockchain::AC_GENESIS_BOOTSTRAP_AUTHORITY_V0 |
-| 2 | blockchain::CC_ENFORCE_SUPPLY_CONSERVATION_POST_GENESIS_V0 |
-| 3 | blockchain::IN_BLOCK_PROPOSED_TO_CANONICAL_CHAIN_V0 |
-| 4 | blockchain::IN_ROUND_SKIPPED_NO_ELIGIBLE_PROPOSER_V0 |
-| 5 | blockchain::WF_COMMIT_BLOCK_AFTER_CONSENSUS_ROUND_V0 |
-| 6 | blockchain::CC_COMMIT_BLOCK_TO_CANONICAL_CHAIN_V0 |
+| 1 | blockchain::IN_COMMIT_BLOCK_V0 |
+| 2 | blockchain::CC_COMMIT_BLOCK_CANONICAL_V0 |
+| 3 | blockchain::WF_COMMIT_BLOCK_V0 |
+| 4 | blockchain::RB_COMMIT_BLOCK_V0 |
 
 ---
 
@@ -92,7 +97,8 @@ critical path.*
 <!-- register:mandate_artifact_summary -->
 | Action (REPLACE, EXTEND, NEW) | Count | Description |
 |-------------------------------|-------|-------------|
-| NEW | 6 | six new artifacts for blockchain/chain subdomain: genesis bootstrap authority, supply conservation enforcement capability, two informational tracking intents (proposed blocks and skipped rounds), commit workflow orchestrator, and canonical chain commitment contract |
+| NEW | 12 | commit cluster (IN/WF/RB/CC/CC/CT) + genesis cluster (IN/WF/RB/CC/EV) + shared CT_PURE_COMPARE_EQUAL_V0 |
+| EXTEND | 1 | extend the canonical chain storage structure with commit semantics |
 
 ---
 
@@ -103,12 +109,18 @@ critical path.*
 <!-- register:field_declarations -->
 | Code | Subdomain Field |
 |------|-----------------|
-| blockchain::AC_GENESIS_BOOTSTRAP_AUTHORITY_V0 | blockchain/chain |
-| blockchain::CC_ENFORCE_SUPPLY_CONSERVATION_POST_GENESIS_V0 | blockchain/chain |
-| blockchain::IN_BLOCK_PROPOSED_TO_CANONICAL_CHAIN_V0 | blockchain/chain |
-| blockchain::WF_COMMIT_BLOCK_AFTER_CONSENSUS_ROUND_V0 | blockchain/chain |
-| blockchain::CC_COMMIT_BLOCK_TO_CANONICAL_CHAIN_V0 | blockchain/chain |
-| blockchain::IN_ROUND_SKIPPED_NO_ELIGIBLE_PROPOSER_V0 | blockchain/chain |
+| blockchain::IN_COMMIT_BLOCK_V0 | chain |
+| blockchain::WF_COMMIT_BLOCK_V0 | chain |
+| blockchain::RB_COMMIT_BLOCK_V0 | chain |
+| blockchain::CC_COMMIT_BLOCK_CANONICAL_V0 | chain |
+| blockchain::CC_VALIDATE_PREDECESSOR_LINK_V0 | chain |
+| blockchain::CT_PURE_HASH_BLOCK_V0 | chain |
+| blockchain::IN_BOOTSTRAP_GENESIS_CHAIN_V0 | chain |
+| blockchain::WF_BOOTSTRAP_GENESIS_CHAIN_V0 | chain |
+| blockchain::RB_BOOTSTRAP_GENESIS_CHAIN_V0 | chain |
+| blockchain::CC_CREATE_GENESIS_BLOCK_V0 | chain |
+| blockchain::EV_GENESIS_CREATED_V0 | chain |
+| blockchain::STRUCTURE_BLOCKCHAIN_STORAGE_V0 | chain |
 
 ---
 

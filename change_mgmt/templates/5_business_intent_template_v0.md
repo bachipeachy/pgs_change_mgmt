@@ -12,13 +12,14 @@
 
 **This artifact is a structured register document — not a narrative.** The Business Intent captures
 the irreducible WHAT — purpose, scope, invariants, actions, and provisional artifact codes. Purpose
-(§1) and Identity Semantics (§4) are short prose (the irreducible business knowledge a compiler can
-never derive); everything else is registers. The worker emits register ROWS; a deterministic
-renderer owns the document.
+(§1) is short prose (the one irreducible business narrative a compiler can never derive); everything
+else — including Identity Semantics (§4) — is registers. The worker emits register ROWS; a
+deterministic renderer owns the document. A required cell with no basis in the seed or the snapshot
+is declared `UNRESOLVED` (a governed hole), never fabricated and never left blank.
 
 VALID OUTPUT:
-- The two short prose sections (Purpose, Identity Semantics) filled for this subdomain
-- Populated register tables (every required register below)
+- The Purpose prose section (§1) filled for this subdomain
+- Populated register tables (every required register below), or `UNRESOLVED` for a genuine hole
 - Business-language descriptions in content columns
 
 INVALID OUTPUT:
@@ -44,7 +45,7 @@ artifacts record facts, never trigger execution.
 |---|------------------------|----------------------------------------|
 | 1 | In one paragraph: what does this subdomain govern, and why does it exist? | Becomes §1 Purpose — the scope of authority everything hangs from. |
 | 2 | For each business record: does history matter, can values be corrected, is deletion allowed? | Selects the Record Model in `business_objects`. |
-| 3 | Which field uniquely identifies each record, where does it come from, what does a duplicate mean? | Becomes §4 Identity Semantics. |
+| 3 | Which field uniquely identifies each record, where does it come from, what does a duplicate mean? | Becomes the `identity_semantics` register (§4). |
 | 4 | What is always forbidden or always required, and what is the business reason? | Becomes `invariants`. |
 | 5 | What verbs can be performed on these records, and who/what triggers each? | Becomes `actions` — each in-scope action yields one Intent and one Workflow. |
 
@@ -82,12 +83,14 @@ names.*
 
 ## 4. Identity Semantics
 
-*Short prose. Which field uniquely identifies each record, where it comes from, what a duplicate
-means, and any cross-subdomain identity relationship. The compiler cannot infer identity semantics
-from field names — this is irreducible business knowledge.*
+*Which field uniquely identifies each record, where it comes from, what a duplicate means, and any
+cross-subdomain identity relationship. The compiler cannot infer identity semantics from field
+names — this is irreducible business knowledge. If a cell is genuinely not derivable from the seed,
+declare it `UNRESOLVED` (a governed hole a human will resolve) rather than guessing.*
 
-[Primary identity field, source, uniqueness rule, and cross-subdomain relationship for
-[domain]/[subdomain]. If none beyond the primary, say so.]
+<!-- register:identity_semantics business_language=identity_field,source,uniqueness_rule,cross_subdomain_relationship -->
+| Store Name | Identity Field | Source | Uniqueness Rule | Cross-Subdomain Relationship | Source Finding |
+|------------|----------------|--------|-----------------|------------------------------|----------------|
 
 ---
 
@@ -145,8 +148,8 @@ from field names — this is irreducible business knowledge.*
 
 *The bounded inputs and emit keys mirror the engine's gov_projection schema exactly
 (`contracts/gov_projection.py`): S5 consumes the S4 discovery output plus the S1 release boundary
-and emits the WHAT. Emit keys match the register ids above exactly (Purpose §1 / Identity §4 /
-Business Objects §3 are this stage's record, not forwarded fields).*
+and emits the WHAT. Emit keys match the register ids above exactly (Purpose §1 / Identity Semantics
+§4 / Business Objects §3 are this stage's record, not forwarded fields).*
 
 | Direction | Fields |
 |-----------|--------|

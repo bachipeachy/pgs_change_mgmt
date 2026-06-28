@@ -127,6 +127,12 @@ Each analysis finding carries an `evidence_status` and a `confidence`:
 > capability still under investigation does NOT belong here — it stays in §3 Dependency Discoveries
 > with `Disposition = INVESTIGATE` and is promoted to an Authoring Decision only once analysis
 > resolves it to REUSE / EXTEND / AUTHOR_NEW. Never carry an unresolved item into both registers.
+>
+> **Release boundary.** A capability named in `out_of_scope` (S1 §12) is deferred to a future CR —
+> do NOT make any authoring decision (REUSE / EXTEND / AUTHOR_NEW) about it; it is simply not in
+> this CR. Reject any analysis recommendation that would author or extend a deferred capability, and
+> do not recommend a design that violates a `business_invariant`, `constraint`, or
+> `authority_boundary` carried from S1.
 
 <!-- register:authoring_decisions business_language=capability -->
 | Capability | Decision (REUSE, EXTEND, AUTHOR_NEW) | Rationale | Alternatives Checked | Source Finding |
@@ -165,6 +171,6 @@ Each analysis finding carries an `evidence_status` and a `confidence`:
 
 | Direction | Fields |
 |-----------|--------|
-| **Consumes** ← Stage 1 | cr_type · assumptions · business_invariants · lifecycle_states · business_events · authority_boundaries |
+| **Consumes** ← Stage 1 | cr_type · assumptions · business_invariants · lifecycle_states · business_events · authority_boundaries · out_of_scope · constraints |
 | **Consumes** ← Stage 2 | belief_verification · pps_baseline_fqdns · gaps · architectural_observations · discovery_concerns · open_questions |
 | **Emits** → Stage 4 | authoring_decisions · dependency_discoveries · placement_decision · saturation |

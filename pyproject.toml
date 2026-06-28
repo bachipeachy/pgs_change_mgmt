@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "pgs_change_mgmt"
-version = "0.6.1"
+version = "0.7.0"
 description = "PGS Change Management Engine — the governance projection engine: a worker-agnostic coordination layer over the compiler (admissibility) and runtime (execution)."
 requires-python = ">=3.11"
 dependencies = ["pyyaml"]

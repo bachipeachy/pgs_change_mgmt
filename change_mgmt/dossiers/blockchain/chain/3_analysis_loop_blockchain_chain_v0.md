@@ -86,9 +86,10 @@ Each analysis finding carries an `evidence_status` and a `confidence`:
 <!-- register:analysis_findings -->
 | Question Id | Finding | Impact | Evidence Status (OBSERVED, INFERRED, OPEN) | Confidence (HIGH, MEDIUM, LOW) | Resolution Status (CLOSED, OPEN) | Evidence |
 |-------------|---------|--------|-----------------|------------|-------------------|----------|
-| Does a capability exist for creating the single genesis block at bootstrap? | No existing artifact was found that handles genesis block creation. The snapshot contains no GENESIS-related artifacts, and all existing CCs/RBs handle post-genesis operations (block proposal, formation, consensus). Genesis is distinct from regular blocks per business invariant. | Requires authoring new capability for genesis creation; this is a one-time bootstrap operation that establishes the canonical chain | OBSERVED | HIGH | CLOSED |  |
-| Is there an existing capability to commit blocks to the canonical chain after consensus? | EV_BLOCK_COMMITTED_V0 exists but has zero consumers. No supporting CC or RB was found that performs actual block commitment operations in a subdomain context. | Requires authoring new runtime binding and capability contract for committing proposed blocks to immutable canonical history | OBSERVED | HIGH | CLOSED |  |
-| Do existing artifacts support chain state management after genesis (committed history, supply conservation)? | No subdomain-specific artifacts exist for managing committed block history or enforcing post-genesis monetary invariants. Existing RBs handle consensus_pos operations but not canonical ledger maintenance. | Requires authoring new capabilities to maintain chain state and enforce immutability constraints on committed blocks | OBSERVED | HIGH | CLOSED |  |
+| AF-1 | No chain-commit operation exists; only the committed-block EVENT exists. | The commit operation must be authored; it can emit the existing event. | OBSERVED | HIGH | CLOSED | vocab_search:COMMIT_BLOCK,APPEND_BLOCK -> 0; blockchain::EV_BLOCK_COMMITTED_V0 exists |
+| AF-2 | No genesis / bootstrap artifact exists in the snapshot. | A one-time genesis bootstrap workflow must be authored. | OBSERVED | HIGH | CLOSED | vocab_search:GENESIS,BOOTSTRAP -> 0 |
+| AF-3 | Chain storage provides append-only block storage but lacks commit semantics. | Extend its usage via the new commit capability rather than author a new store. | OBSERVED | HIGH | CLOSED | blockchain::STRUCTURE_BLOCKCHAIN_STORAGE_V0 PARTIAL fit |
+| AF-4 | The consensus loop already produces the proposed blocks the chain will commit. | Commit consumes proposed blocks; reuse the loop unchanged. | OBSERVED | HIGH | CLOSED | blockchain::RB_RUN_CONSENSUS_LOOP_V0 (S2 Belief #2) |
 
 ---
 
@@ -99,13 +100,10 @@ Each analysis finding carries an `evidence_status` and a `confidence`:
 <!-- register:verification_results -->
 | Item | Origin | Result (CONFIRMED, OVERTURNED) | Evidence |
 |------|--------|--------|----------|
-| All proposed blocks are good and are committed as finalized (no rejection path this increment) | CR seed §6 Assumptions | CONFIRMED | blockchain::CC_FORM_BLOCK_V0, blockchain::EV_BLOCK_COMMITTED_V0 |
-| Exactly one genesis block exists per chain and executes exactly once at bootstrap | CR seed §8 Business Invariants #1-2 | CONFIRMED | No GENESIS artifacts found in snapshot; requires new capability to enforce this invariant |
-| Total supply is conserved and equals 1,000,000 BachiCoin (no minting or burning after genesis) | CR seed §8 Business Invariants #3 | CONFIRMED | blockchain::RB_MINT_V0 exists but is for pre-genesis; post-genesis supply conservation requires new chain subdomain capability |
-| A committed block is immutable — it never changes or disappears | CR seed §8 Business Invariants #4 | CONFIRMED | blockchain::EV_BLOCK_COMMITTED_V0, blockchain::CC_FORM_BLOCK_V0 |
-| Every committed block has exactly one predecessor, except the genesis block | CR seed §8 Business Invariants #5 | CONFIRMED | blockchain::CC_FORM_BLOCK_V0 (writes to BLOCKS store with single predecessor reference) |
-| A block cannot be committed twice | CR seed §8 Business Invariants #6 | CONFIRMED | blockchain::CC_FORM_BLOCK_V0 (WRITE operation to BLOCKS store) |
-| The canonical chain is the authoritative source of committed history; a proposed block is not authoritative until committed | CR seed §8 Business Invariants #7 | CONFIRMED | blockchain::EV_BLOCK_PROPOSED_V0, blockchain::EV_BLOCK_COMMITTED_V0 |
+| No chain commit capability (S1 belief #1) | S2 belief_verification #1 | CONFIRMED | re-grounded: vocab_search:COMMIT_BLOCK -> 0 |
+| Consensus loop exists (S1 belief #2) | S2 belief_verification #2 | CONFIRMED | blockchain::RB_RUN_CONSENSUS_LOOP_V0 |
+| Block proposal exists (S1 belief #3) | S2 belief_verification #3 | CONFIRMED | blockchain::CC_INVOKE_BLOCK_PROPOSAL_V0 |
+| Committed-block event already exists | S2 belief #1 evidence | CONFIRMED | blockchain::EV_BLOCK_COMMITTED_V0 grounded |
 
 ---
 
@@ -116,10 +114,16 @@ Each analysis finding carries an `evidence_status` and a `confidence`:
 <!-- register:dependency_discoveries -->
 | Dependency | Type | Disposition (EXISTING, REUSE, AUTHOR_NEW, INVESTIGATE) | Evidence |
 |------------|------|-------------|----------|
-| Blockchain storage structure for chain subdomain stores (BLOCKS, BLOCK_EVENTS) | storage | EXISTING | blockchain::STRUCTURE_BLOCKCHAIN_STORAGE_V0 |
-| Append-only event journal capability for chain lifecycle events | capability_side_effect | REUSE | CS_APPENDONLY_JSONL_V0 (bound via blockchain::RB_PROPOSE_BLOCK_V0, blockchain::CC_FORM_BLOCK_V0) |
-| Mutable JSON store access for chain state writes | capability_side_effect | REUSE | CS_MUTABLE_JSON_V0 (bound via blockchain::RB_PROPOSE_BLOCK_V0, blockchain::CC_FORM_BLOCK_V0) |
-| Block lifecycle event emission capability | capability_contract | REUSE | blockchain::EV_BLOCK_COMMITTED_V0 (event code for committed blocks) |
+| Chain commit capability | capability_contract | AUTHOR_NEW | vocab_search:COMMIT_BLOCK -> 0 |
+| Genesis bootstrap workflow | workflow | AUTHOR_NEW | vocab_search:GENESIS -> 0 |
+| Committed-block event | event | EXISTING | blockchain::EV_BLOCK_COMMITTED_V0 |
+| Canonical chain store | storage | EXISTING | blockchain::STRUCTURE_BLOCKCHAIN_STORAGE_V0 (extend usage) |
+| Consensus loop runtime binding | runtime_binding | EXISTING | blockchain::RB_RUN_CONSENSUS_LOOP_V0 |
+| Block proposal invocation | capability_contract | EXISTING | blockchain::CC_INVOKE_BLOCK_PROPOSAL_V0 |
+| Proposer selection | capability_contract | EXISTING | blockchain::CC_QUERY_ELIGIBLE_VALIDATORS_V0; CC_SELECT_PROPOSER_V0 |
+| Mint capability | runtime_binding | REUSE | blockchain::RB_MINT_V0; CC_VALIDATE_MINT_POLICY_V0 |
+| Wallet creation | runtime_binding | REUSE | blockchain::RB_CREATE_WALLET_V0 |
+| Genesis Actor registration | runtime_binding | REUSE | blockchain::RB_REGISTER_ACTOR_UNVERIFIED_V0 |
 
 ---
 
@@ -130,9 +134,9 @@ Each analysis finding carries an `evidence_status` and a `confidence`:
 <!-- register:impact_analysis -->
 | Artifact | Impact Scope | Consumer Count | Evidence |
 |----------|--------------|----------------|----------|
-| Genesis creation capability (proposed) | Creates single genesis block; establishes canonical chain state and initial monetary supply | 0 | No existing GENESIS artifacts found via vocab search |
-| Block commitment capability (proposed) | Commits proposed blocks to canonical chain; emits committed block event | 0 | blockchain::EV_BLOCK_COMMITTED_V0 has zero consumers per topology_impact |
-| Chain state management capability (proposed) | Maintains committed block history; enforces immutability and supply conservation invariants | 0 | No existing chain subdomain artifacts found |
+| new chain-commit capability | invoked by the consensus loop after block proposal each round | 1 | blockchain::RB_RUN_CONSENSUS_LOOP_V0 (S2 Belief #2) |
+| new genesis bootstrap workflow | run once at initialization, before the consensus loop; creates genesis + mints supply | 0 (bootstrap entry point) | CR Seed Sec4.#2 |
+| reused committed-block event | emitted by the new commit capability; existing consumers unchanged | existing | blockchain::EV_BLOCK_COMMITTED_V0 |
 
 ---
 
@@ -144,13 +148,26 @@ Each analysis finding carries an `evidence_status` and a `confidence`:
 > capability still under investigation does NOT belong here — it stays in §3 Dependency Discoveries
 > with `Disposition = INVESTIGATE` and is promoted to an Authoring Decision only once analysis
 > resolves it to REUSE / EXTEND / AUTHOR_NEW. Never carry an unresolved item into both registers.
+>
+> **Release boundary.** A capability named in `out_of_scope` (S1 §12) is deferred to a future CR —
+> do NOT make any authoring decision (REUSE / EXTEND / AUTHOR_NEW) about it; it is simply not in
+> this CR. Reject any analysis recommendation that would author or extend a deferred capability, and
+> do not recommend a design that violates a `business_invariant`, `constraint`, or
+> `authority_boundary` carried from S1.
 
 <!-- register:authoring_decisions business_language=capability -->
 | Capability | Decision (REUSE, EXTEND, AUTHOR_NEW) | Rationale | Alternatives Checked | Source Finding |
 |------------|----------|-----------|----------------------|----------------|
-| Genesis block creation at bootstrap | AUTHOR_NEW | No existing artifact handles genesis creation. Genesis is a distinct one-time operation that establishes the canonical chain and initial monetary state, separate from regular block proposal/formation operations. | Searched snapshot for GENESIS-related artifacts; none found (vocab search returned empty). Existing CCs/RBs handle post-genesis consensus_pos operations only. |  |
-| Block commitment to canonical chain | AUTHOR_NEW | EV_BLOCK_COMMITTED_V0 exists but has zero consumers and no supporting runtime binding or capability contract for actual commit operation. Need new RB/CC pair in chain subdomain. | blockchain::EV_BLOCK_COMMITTED_V0 (exists, 0 consumers per topology_impact); blockchain::RB_PROPOSE_BLOCK_V0 (handles proposal not commitment) |  |
-| Chain state maintenance after genesis | AUTHOR_NEW | No existing artifacts manage committed block history or enforce post-genesis supply conservation. Need new capabilities to maintain canonical ledger and immutability constraints. | blockchain::CC_FORM_BLOCK_V0 (forms proposed blocks, not commits); blockchain::RB_PROPOSE_BLOCK_V0 (consensus_pos operations only) |  |
+| Commit a proposed block to the canonical chain (make it immutable and authoritative) | AUTHOR_NEW | No commit operation exists (vocab_search COMMIT_BLOCK/APPEND_BLOCK -> 0). The committed-block event already exists, so only the operation is authored; it emits that existing event. | blockchain::EV_BLOCK_COMMITTED_V0 exists (event only) | S2 belief #1 VERIFIED; S2 gap (commit) CRITICAL |
+| Bootstrap the chain from a genesis block and mint the initial supply | AUTHOR_NEW | No genesis/bootstrap artifact exists (vocab_search GENESIS/BOOTSTRAP -> 0). Author a one-time workflow that creates the genesis block and mints to the Genesis Actor. | vocab_search:GENESIS,BOOTSTRAP -> 0 | S2 gap (genesis) CRITICAL; CR Seed Sec4.#2 |
+| Append committed blocks to the canonical chain store | EXTEND | Append-only block storage exists but lacks commit semantics (PARTIAL); extend its usage with the new commit capability rather than author a new store. | blockchain::STRUCTURE_BLOCKCHAIN_STORAGE_V0 - PARTIAL | S2 pps_baseline STRUCTURE_BLOCKCHAIN_STORAGE_V0 |
+| Record that a block has been committed (event) | REUSE | The committed-block event already exists; the new commit operation emits it. No new event needed. | blockchain::EV_BLOCK_COMMITTED_V0 - EXACT (event exists) | S2 belief #1 evidence |
+| Run the consensus loop that proposes blocks each round | REUSE | Existing consensus loop satisfies slot processing and produces the proposed blocks the chain commits. | blockchain::RB_RUN_CONSENSUS_LOOP_V0 - EXACT | S2 belief #2 VERIFIED |
+| Produce a proposed block for the round | REUSE | Existing block-proposal capability produces the proposed block (the input to commit). | blockchain::CC_INVOKE_BLOCK_PROPOSAL_V0 - EXACT | S2 belief #3 VERIFIED |
+| Select the proposer for a round from eligible validators | REUSE | Existing eligibility query and proposer selection already choose the proposer. | blockchain::CC_QUERY_ELIGIBLE_VALIDATORS_V0 - EXACT | S2 belief #4 VERIFIED |
+| Mint the initial BachiCoin supply at genesis | REUSE | Existing mint capability/policy is reused by the genesis bootstrap to mint the fixed 1,000,000 supply. | blockchain::RB_MINT_V0; CC_VALIDATE_MINT_POLICY_V0 - PARTIAL (genesis context) | S2 pps_baseline mint; CR Seed Sec4.#3 |
+| Create the MINT wallet held by the Genesis Actor | REUSE | Existing wallet-creation runtime binding is reused at genesis for the Genesis Actor's MINT wallet. | blockchain::RB_CREATE_WALLET_V0 - PARTIAL (genesis context) | S2 pps_baseline wallet; CR Seed Sec4.#4 |
+| Register the permanent Genesis Actor | REUSE | Existing actor-registration runtime binding is reused to establish the Genesis Actor. | blockchain::RB_REGISTER_ACTOR_UNVERIFIED_V0 - PARTIAL | S2 entities Genesis Actor; CR Seed Sec4.#4 |
 
 ---
 
@@ -161,7 +178,7 @@ Each analysis finding carries an `evidence_status` and a `confidence`:
 <!-- register:placement_decision business_language=subdomain -->
 | Decision (NEW_SUBDOMAIN, EXTEND) | Subdomain | Rationale | Source Finding |
 |----------|-----------|-----------|----------------|
-| NEW_SUBDOMAIN | chain | The canonical ledger is a distinct concern from block proposal and consensus coordination. Genesis creation, block commitment to immutable history, and chain state management require their own governance boundary separate from the existing consensus_pos subdomain. | CR seed §1 CR Type: The canonical ledger (chain) is a distinct concern from block proposal and needs its own governance boundary; it is not an extension of an existing subdomain. |
+| NEW_SUBDOMAIN | blockchain::chain | The canonical ledger (chain) is a distinct concern from block proposal and needs its own governance boundary; it is not an extension of an existing subdomain. | CR Seed Sec1; S2 placement |
 
 ---
 
@@ -172,11 +189,10 @@ Each analysis finding carries an `evidence_status` and a `confidence`:
 <!-- register:saturation business_language=criterion -->
 | Criterion | Status (SATISFIED, NOT_SATISFIED) | Evidence |
 |-----------|--------|----------|
-| No unresolved critical gaps in capability coverage | SATISFIED | All three core capabilities (genesis creation, block commitment, chain state management) identified and classified as AUTHOR_NEW; no other gaps found via vocab search |
-| No open analyst questions requiring human resolution | SATISFIED | All analysis findings resolved to CLOSED status with clear authoring decisions |
-| No dependency expansion in last pass | SATISFIED | Dependency discoveries show only existing infrastructure (storage structure, common CS bindings) reused; no new external dependencies identified |
-| Verification pass complete with no overturned items unresolved | SATISFIED | All seven verification results CONFIRMED against snapshot evidence from CR seed assumptions and business invariants |
-| Every inferred finding promoted to observed or carried forward with reason | SATISFIED | All findings marked OBSERVED via vocab search; no INFERRED status items remain |
+| All CRITICAL gaps dispositioned | SATISFIED | commit + genesis assigned AUTHOR_NEW; no CRITICAL gap left open |
+| No open analyst questions | SATISFIED | all analysis_findings resolution_status CLOSED |
+| Every required capability has a REUSE/EXTEND/AUTHOR_NEW decision | SATISFIED | 10 authoring decisions cover commit, genesis, storage, event, consensus, proposal, proposer, mint, wallet, actor |
+| Deferred items excluded from authoring | SATISFIED | fork/slashing/rewards/attest noted as deferred (S2 discovery_concerns); no authoring decision made for them |
 
 *Required criteria: (1) no unresolved CRITICAL gaps; (2) no open analyst questions; (3) no dependency expansion in the last pass; (4) verification pass complete, no OVERTURNED item unresolved; (5) every INFERRED finding promoted to OBSERVED, explicitly accepted, or carried forward with a reason.*
 
@@ -191,6 +207,6 @@ Each analysis finding carries an `evidence_status` and a `confidence`:
 
 | Direction | Fields |
 |-----------|--------|
-| **Consumes** ← Stage 1 | cr_type · assumptions · business_invariants · lifecycle_states · business_events · authority_boundaries |
+| **Consumes** ← Stage 1 | cr_type · assumptions · business_invariants · lifecycle_states · business_events · authority_boundaries · out_of_scope · constraints |
 | **Consumes** ← Stage 2 | belief_verification · pps_baseline_fqdns · gaps · architectural_observations · discovery_concerns · open_questions |
 | **Emits** → Stage 4 | authoring_decisions · dependency_discoveries · placement_decision · saturation |

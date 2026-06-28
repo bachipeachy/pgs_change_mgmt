@@ -3,7 +3,7 @@
 Proves the engine coordinates all four seams end-to-end (worker → evaluator → renderer →
 artifact) by injecting a StubWorker that returns a known-good mempool CC contract object. The
 architecture's promise is exactly that this is all it takes to swap a worker: the live qwen
-run is `run(QwenWorker(grounding), grounding, "blockchain_mempool")` — same call, real worker.
+run is `run(OllamaWorker(grounding), grounding, "blockchain_mempool")` — same call, real worker.
 
 Run:  PGS_WORKSPACE=/abs/path python -m pgs_change_mgmt.engine._selftest
 """

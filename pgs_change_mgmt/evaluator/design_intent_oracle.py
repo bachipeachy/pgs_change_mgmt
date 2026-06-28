@@ -160,6 +160,57 @@ def check_design_intent(data: dict[str, list[dict[str, Any]]], grounding) -> lis
     return issues
 
 
+def check_cc_composition(data: dict[str, list[dict[str, Any]]], grounding) -> list[tuple[str, str]]:
+    """Cross-register checks for Stage 6b §6 Capability Composition (optional during rollout).
+
+    Composition declares the inside of each new CC — the CT/CS steps it is built from. Checks:
+
+      * each `cc_code` is a declared CC (new_artifacts / existing_inventory) that also appears as a
+        node in `execution_topology` — a composed CC with no routed home is orphaned
+      * each `capability` is a CT or CS (a CC composes only CT/CS), and is declared in new_artifacts
+        or grounded existing — codes verbatim, same immutability as every binding FQDN
+      * the `kind` cell matches the capability family (a CT row ⇒ CT_ code; a CS row ⇒ CS_)
+
+    Empty register ⇒ no issues (optional during rollout). Issues mark `cc_composition` dirty.
+    """
+    issues: list[tuple[str, str]] = []
+    rows = data.get("cc_composition") or []
+    if not rows:
+        return issues
+
+    declared_new = {cp for r in (data.get("new_artifacts") or []) if (cp := _code_part(r.get("code", "")))}
+    declared = declared_new | _codes_in(data.get("existing_inventory"), "fqdn")
+    topo_nodes = _codes_in(data.get("execution_topology"), "node")
+
+    for r in rows:
+        if not isinstance(r, dict):
+            continue
+        cc = _code_part(r.get("cc_code", ""))
+        cap = _code_part(r.get("capability", ""))
+        kind = str(r.get("kind", "")).strip().upper()
+
+        if cc:
+            if cc not in declared and not _exists(grounding, cc):
+                issues.append(("cc_composition",
+                    f"composed CC '{cc}' is not a declared CC (new_artifacts / existing_inventory)"))
+            elif cc not in topo_nodes:
+                issues.append(("cc_composition",
+                    f"composed CC '{cc}' does not appear as a node in execution_topology — orphaned composition"))
+
+        if cap:
+            fam = cap.split("_", 1)[0]
+            if fam not in {"CT", "CS"}:
+                issues.append(("cc_composition",
+                    f"composition step '{cap}' is a {fam} — a CC composes only CT/CS capabilities"))
+            elif cap not in declared and not _exists(grounding, cap):
+                issues.append(("cc_composition",
+                    f"capability '{cap}' is neither declared in new_artifacts nor existing in the snapshot"))
+            if kind in {"CT", "CS"} and kind != fam:
+                issues.append(("cc_composition",
+                    f"step kind '{kind}' != capability family '{fam}' for '{cap}'"))
+    return issues
+
+
 def check_authoring_mandate(data: dict[str, list], upstream: dict[str, list]) -> list[tuple[str, str]]:
     """Cross-STAGE checks for Stage 7 (Authoring Mandate). S7 must ORDER the codes Stage 6b
     assigned — never introduce or re-spell one. `upstream` is the consumed Stage 6b projection.

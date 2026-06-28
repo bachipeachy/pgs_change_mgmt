@@ -121,6 +121,10 @@ cite its FQDN in **Source Finding** only — never in the Capability Need cell.*
 
 *Every capability discovered during Analysis Loop. CRITICAL = must author this CR. ADVISORY = should author. SATISFIED = exists in PPS. Capability column is business language — no FQDNs.*
 
+> **Release boundary.** A capability deferred in `out_of_scope` (S1 §12) is NOT part of this CR — do
+> not list it here in any status, and never promote it to a CRITICAL gap. The oracle drops governed
+> coverage for a capability row that names a deferred item.
+
 <!-- register:capability_graph business_language -->
 | Capability | Source Finding | Status | Gap Register Entry | Notes |
 |-----------|----------------|--------|--------------------|-------|
@@ -208,7 +212,7 @@ gov_projection schema exactly (`contracts/gov_projection.py`).*
 
 | Direction | Fields |
 |-----------|--------|
-| **Consumes** ← Stage 1 | cr_type · constraints · business_invariants · authority_boundaries |
+| **Consumes** ← Stage 1 | cr_type · constraints · business_invariants · authority_boundaries · out_of_scope |
 | **Consumes** ← Stage 2 | entities · entity_attributes · business_processes · pps_baseline_fqdns |
 | **Consumes** ← Stage 3 | authoring_decisions · dependency_discoveries · placement_decision · saturation |
 | **Emits** → Stage 5 | actors · bm_entities · events · capability_graph · dependency_graph · constraint_register · gap_register · design_decisions · authoring_scope |

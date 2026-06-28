@@ -47,6 +47,27 @@ code mechanically.
   (the oracle collision-checks via grounding). Existing artifacts go in `existing_inventory`.
 - **Reconciled:** the NEW counts in `artifact_summary` MUST equal the rows of `new_artifacts`.
 
+### Capability Composition discipline (the oracle enforces these)
+
+`cc_composition` declares the second half of Design Intent: WHAT each new CC is composed of. Workflow
+topology (§5) says how CCs route to one another; composition says what is *inside* each CC. It is
+**declarative, not procedural** — you declare the governed capabilities the CC is built from and how
+data flows between them; you never write code, JSON, JSONPath, or an implementation.
+
+- **CT/CS only.** Each composition step is a Capability Transform (`CT`, pure compute, zero side
+  effects) or a Capability Side Effect (`CS`, the only place external state changes) — never a CC, WF,
+  or IN. A CC composes *capabilities*, not other CCs.
+- **Codes verbatim.** Every `Capability` cell is a CT/CS binding FQDN copied verbatim from
+  `new_artifacts` (NEW) or a grounded `existing_inventory` artifact (REUSE) — same immutability rule
+  as every binding FQDN. A composition code absent from both registers is a defect.
+- **Data flow is logical, not wired.** `Consumes` / `Produces` name business/data fields (e.g.
+  `proposed_block`, `content_hash`), connecting a CC's inputs to its steps and step-to-step. Concrete
+  JSONPath wiring is construction (S8), not design.
+- **Outcome coverage.** The outcomes the composition can yield MUST cover the CC's routing surface in
+  `execution_topology` (§5): if topology routes the CC on `SUCCESS` and `ALREADY_EXISTS`, the
+  composition must be able to produce both. The oracle cross-checks composition ⊇ topology surface.
+- **CT purity.** A `CT` step may not appear where a side effect is required, and may never be a CS.
+
 ### Business-Language Rule
 
 Only the `capability` column of `new_artifacts` is business language (name the need, not the
@@ -71,6 +92,7 @@ binding codes belong. Existing artifacts are cited by their real FQDN in `fqdn` 
 - **Workflow nodes are IN, CC, EXIT/EXIT_SUCCESS only.** Sub-workflow invocation = gateway CC bound to `CS_WORKFLOW_GATEWAY_V0` (precedent: `CC_INVOKE_BLOCK_PROPOSAL_V0`). EV_ artifacts are emitted facts, never triggers.
 - A store is written only by CCs of its owning subdomain. Writing CCs for peer stores are declared in the dependency-gap section with peer ownership.
 - Before declaring a new CT or EV: check the existing inventory (the transform vocabulary and event set usually already contain the atom) — if reused, it belongs in `existing_inventory`, not `new_artifacts`.
+- **Compose every new CC.** Each `family = CC` row in `new_artifacts` gets a `cc_composition` (§6): the ordered CT/CS steps it is built from + their data flow. Leaving a CC's composition unstated leaves construction a design decision — exactly the black box this stage exists to close.
 - **Module path assignment (reference):** IN→`[repo].registry.[subdomain].intents`, WF→`.workflows`, CC→`.capability_contracts`, CT→`.capability_transforms`, RB→`.runtime_bindings`, STRUCTURE→`.structures`. A missing assignment is a build failure.
 
 ---
@@ -127,7 +149,21 @@ binding codes belong. Existing artifacts are cited by their real FQDN in `fqdn` 
 
 ---
 
-## 6. STRUCTURE Stores
+## 6. Capability Composition
+
+*The inside of each new CC: the ordered CT/CS steps it is composed of and how data flows between
+them. Declarative, not procedural — governed capabilities + data flow, never code or JSONPath. One
+row per (CC, step), in execution order. `capability` is a CT/CS binding FQDN (verbatim from
+`new_artifacts` or `existing_inventory`); `consumes`/`produces` name logical data fields. The
+outcomes the composition can yield must cover the CC's routing surface in `execution_topology` (§5).*
+
+<!-- register:cc_composition optional -->
+| CC Code | Step | Capability | Kind (CT, CS) | Operation | Consumes | Produces |
+|---------|------|------------|---------------|-----------|----------|----------|
+
+---
+
+## 7. STRUCTURE Stores
 
 *New entity stores. `storage_type` selects the CS substrate; `proposed_path` is the declared store path (governance concern — never hardcoded later); `used_by` names the writing CC (its owning subdomain only).*
 
@@ -137,7 +173,7 @@ binding codes belong. Existing artifacts are cited by their real FQDN in `fqdn` 
 
 ---
 
-## 7. Artifact Summary
+## 8. Artifact Summary
 
 *Artifact count by action type, for Stage 7 input. The oracle reconciles: the NEW counts here MUST equal the rows of `new_artifacts`. `artifacts` lists the codes for that action.*
 
@@ -177,7 +213,8 @@ Mandate. Gate 2 (after Stage 7) locks the full dossier before artifact authoring
 *The bounded inputs and emit keys mirror the engine's gov_projection schema exactly
 (`contracts/gov_projection.py`). 6b is the binding stage — it consumes the full design context
 (S2 attribute/step data, S4 gaps/decisions, S5 intent + provisional codes, S6 placement) and emits
-the five registers S7 builds from. Emit keys match the register ids above exactly.*
+the five registers S7 builds from, plus `cc_composition` which the S8 Build Sheet assembles. Emit
+keys match the register ids above exactly.*
 
 | Direction | Fields |
 |-----------|--------|
@@ -186,3 +223,4 @@ the five registers S7 builds from. Emit keys match the register ids above exactl
 | **Consumes** ← Stage 5 | scope_boundary · invariants · actions · provisional_codes |
 | **Consumes** ← Stage 6 | ownership · storage_governance · cross_subdomain_deps · pps_artifacts_requiring_action |
 | **Emits** → Stage 7 | new_artifacts · existing_inventory · rb_declarations · execution_topology · artifact_summary |
+| **Emits** → Stage 8 (Build Sheet) | cc_composition |

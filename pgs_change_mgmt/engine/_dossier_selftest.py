@@ -41,6 +41,16 @@ class StubDossierWorker:
         registers = {f.field: [{"value": "stub", "source_finding": "stub", "evidence": "stub",
                                 "fqdn": "blockchain::CC_FORM_BLOCK_V0"}]
                      for f in fields_emitted_by(task.stage)}
+        # Verification spine (Fix A): a stage emitting `belief_verification` must hand back one
+        # valid disposition row per incoming System Belief, else the Tier-1 spine gate halts the
+        # pipeline. Emit a structurally complete ledger so this WIRING proof stays admissible.
+        if "belief_verification" in registers:
+            n = len(task.input_projection.values.get("system_beliefs") or []) or 1
+            registers["belief_verification"] = [
+                {"belief": f"stub belief {k}", "result": "VERIFIED",
+                 "evidence": "blockchain::CC_FORM_BLOCK_V0", "source_finding": "stub"}
+                for k in range(n)
+            ]
         doc = f"# Stage {task.stage} document (stub)\n\nbody"
         telem = "[tool-loop: iters=1/24 tool_calls=0 reason=finished final_chars=0]"
         return StageOutput(stage=task.stage, registers=registers, findings=(telem, doc))
@@ -76,8 +86,76 @@ def main() -> int:
         docs = sorted(p.name for p in (Path(tmp) / "chain").glob("*.md"))
         print(f"  docs written: {docs}")
 
+    # 4. ADMISSIBILITY GATES — an inadmissible stage must NOT persist a consumable handoff and must
+    #    HALT the pipeline (compiler discipline: no object file from a failed compile).
+    from .dossier import HALT_EMPTY_EMIT, HALT_SPINE_INVALID
+
+    def _wrap(mutate):
+        w = StubDossierWorker()
+        orig = w.execute_stage
+
+        def run(task: StageInput) -> StageOutput:
+            return mutate(task, orig(task))
+
+        w.execute_stage = run  # type: ignore[method-assign]
+        return w
+
+    # 4a. EMPTY_EMIT at S3 — the live blockchain_chain failure: S1/S2 clean, S3 emits nothing.
+    with tempfile.TemporaryDirectory() as tmp:
+        seed = replace(DOSSIER_SEEDS["blockchain_chain"], output_dir=Path(tmp) / "chain")
+        result = run_dossier(
+            _wrap(lambda t, o: replace(o, registers={}) if t.stage == "3" else o),
+            PiGroundingProvider(), seed, stages=("1", "2", "3", "4"), runs_root=Path(tmp) / "runs")
+        s3 = next(s for s in result.stages if s.stage == "3")
+        assert s3.halt_reason == HALT_EMPTY_EMIT and not s3.ok, "empty S3 projection must be inadmissible"
+        assert not (Path(tmp) / "chain" / "_handoff" / "3.json").exists(), \
+            "empty projection must NOT persist a consumable handoff (the bug)"
+        assert [s.stage for s in result.stages] == ["1", "2", "3"], "pipeline must HALT before S4"
+        assert not result.ok
+        # diagnostics must capture the raw worker output so the failure stays inspectable
+        chain = Path(tmp) / "chain"
+        diag = json.loads((chain / "3_analysis_loop_blockchain_chain_diagnostics.json").read_text())
+        assert diag["raw_register_keys"] == [] and "raw_output_file" in diag, \
+            "diagnostics must record the worker's raw register keys + output"
+        assert (chain / diag["raw_output_file"]).exists(), "raw worker output must be persisted"
+        print(f"\n  empty-projection gate ✓ — S3 emitted {{}} → INADMISSIBLE [{s3.halt_reason}], "
+              "no 3.json persisted, halted before S4; raw output captured for diagnosis")
+
+    # 4b. VERIFICATION_SPINE_INVALID at S2 — output produced, belief ledger empty.
+    def _empty_spine(t: StageInput, o: StageOutput) -> StageOutput:
+        return (replace(o, registers={**o.registers, "belief_verification": []})
+                if "belief_verification" in o.registers else o)
+
+    with tempfile.TemporaryDirectory() as tmp:
+        seed = replace(DOSSIER_SEEDS["blockchain_chain"], output_dir=Path(tmp) / "chain")
+        result = run_dossier(_wrap(_empty_spine), PiGroundingProvider(), seed,
+                             stages=("1", "2", "3"), runs_root=Path(tmp) / "runs")
+        s2 = next(s for s in result.stages if s.stage == "2")
+        assert s2.halt_reason == HALT_SPINE_INVALID and not s2.ok, "incomplete spine must be inadmissible"
+        assert not (Path(tmp) / "chain" / "_handoff" / "2.json").exists()
+        assert [s.stage for s in result.stages] == ["1", "2"], "pipeline must HALT before S3"
+        print(f"  spine gate ✓ — S2 empty belief ledger → INADMISSIBLE [{s2.halt_reason}], "
+              f"no 2.json persisted, halted before S3; defect: {s2.spine_defects[0]}")
+
+    # 5. COMPLETENESS — a required human-authored prose section that ships as an unfilled `[...]`
+    #    placeholder is a GAP: it marks the stage not-ok and is reported, but it is NOT a halt
+    #    (no resolution path until human injection exists, and it does not propagate downstream).
+    from ..renderer.dossier_stage import unfilled_prose_placeholders
+    from .dossier import StageResult
+    # the gap is NAMED by its nearest heading so the console can say WHICH section is open
+    assert unfilled_prose_placeholders("## Purpose\n\n[Purpose paragraph for x.]\n") == \
+        ["§Purpose — [Purpose paragraph for x.]"], "must detect + name a standalone placeholder line"
+    assert unfilled_prose_placeholders("filled prose, see [ref](u) and range [0,1]") == [], \
+        "must NOT false-positive on inline brackets / links"
+    sr = StageResult(stage="5", structured=True, incomplete_sections=["[Purpose paragraph for x.]"])
+    sr.doc_path = Path("x")
+    assert not sr.ok and sr.halt_reason is None, "incomplete required section → not-ok, but NOT a halt"
+    assert sr.rating < 5, "an incomplete required section costs a star"
+    print("  completeness check ✓ — unfilled required prose section → gap (not-ok, reported, NOT halted)")
+
     print("\nDOSSIER WIRING PROOF OK ✓ — staged loop, bounded gov_projection handoff, "
-          "completeness + identity figure of merit, doc persistence")
+          "completeness + identity figure of merit, doc persistence, admissibility gates "
+          "(empty-projection + verification spine), required-section completeness")
     return 0
 
 

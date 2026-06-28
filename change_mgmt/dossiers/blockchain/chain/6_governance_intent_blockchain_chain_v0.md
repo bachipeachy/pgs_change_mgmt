@@ -74,12 +74,12 @@ A required register with no rows renders as `| NONE IDENTIFIED |`.
 <!-- register:ownership business_language=capability -->
 | Capability | Owner Subdomain | Disposition (OWNED, SATISFIED, DEFERRED) | Existing Artifact | Source Finding |
 |------------|-----------------|------------------------------------------|-------------------|----------------|
-| create genesis block at bootstrap | blockchain/chain | OWNED | None | upstream handoff: authoring_scope capability create genesis block |
-| commit blocks to canonical chain immutably | blockchain/chain | OWNED | None | upstream handoff: authoring_scope capability commit block; blockchain::EV_BLOCK_COMMITTED_V0 event contract |
-| maintain chain state with supply conservation after genesis | blockchain/chain | OWNED | None | upstream handoff: authoring_scope capability maintain chain state; blockchain::CC_VALIDATE_MINT_POLICY_V0 for conservation |
-| record consensus round outcome including skip decisions | blockchain/chain | SATISFIED | blockchain::CC_RECORD_CONSENSUS_ROUND_V0; blockchain::CC_SKIP_ROUND_V0 | upstream handoff: events Round Skipped lifecycle meaning |
-| append block lifecycle events to immutable journal | blockchain/chain | SATISFIED | capability_side_effects::CS_APPENDONLY_JSONL_V0; blockchain::CC_FORM_BLOCK_V0 pipeline step append_block_event | upstream handoff: dependency_graph capability side effect reuse for event journaling |
-| write committed blocks to immutable BLOCKS store | blockchain/chain | SATISFIED | capability_side_effects::CS_MUTABLE_JSON_V0; blockchain::CC_FORM_BLOCK_V0 pipeline step write_block | upstream handoff: dependency_graph capability side effect reuse for mutable store access |
+| Commit a proposed block to the canonical chain | chain | OWNED |  | S4 GAP-1 |
+| Bootstrap the chain from genesis and mint initial supply | chain | OWNED |  | S4 GAP-2 |
+| Append committed blocks to the canonical store | chain | OWNED | blockchain::STRUCTURE_BLOCKCHAIN_STORAGE_V0 | S4 GAP-3 |
+| Produce a proposed block | consensus | SATISFIED | blockchain::CC_INVOKE_BLOCK_PROPOSAL_V0 | S3 REUSE |
+| Mint the initial supply | blockchain | SATISFIED | blockchain::RB_MINT_V0 | S3 REUSE |
+| Attestation, finalization, slashing, rewards | chain | DEFERRED |  | S1 out_of_scope |
 
 ---
 
@@ -90,9 +90,8 @@ A required register with no rows renders as `| NONE IDENTIFIED |`.
 <!-- register:storage_governance business_language=storage_need,purpose -->
 | Storage Need | Purpose | Subdomain | Source Finding |
 |--------------|---------|-----------|----------------|
-| append-only event journal for block lifecycle records | preserve historical audit trail of proposed, attested, and committed blocks with cryptographic linkage to predecessor | blockchain/chain | upstream handoff: dependency_graph capability side effect reuse; fb.topology::SURFACE_CONTRACT_STORAGE_APPENDONLY_APPEND_V0 contract |
-| mutable store for committed block records with cryptographic predecessor linkage | maintain canonical chain history where each block references exactly one predecessor except genesis, ensuring linear unambiguous ordering | blockchain/chain | upstream handoff: dependency_graph capability side effect reuse; fb.topology::SURFACE_CONTRACT_STORAGE_WRITE_V0 contract |
-| immutable storage structure for blockchain subdomain topology and store resolution | define registry locations, operational constraints, and canonical chain immutability after compilation per governance constitutions | blockchain/chain | upstream handoff: dependency_graph storage structure reuse; fb.blockchain::STRUCTURE_BUILD_BLOCKCHAIN_V0 topology definition |
+| canonical block records | immutable, ordered history of committed blocks | chain | S1 invariant immutability |
+| chain head pointer | track the latest committed block height | chain | S4 entity Chain |
 
 ---
 
@@ -103,9 +102,9 @@ A required register with no rows renders as `| NONE IDENTIFIED |`.
 <!-- register:cross_subdomain_deps optional business_language=dependency -->
 | Dependency | Direction | Existing Artifact | Status (SATISFIED, GAP) | Source Finding |
 |------------|-----------|-------------------|-------------------------|----------------|
-| fb.blockchain configuration defining blockchain subdomain parameters and operational constraints | blockchain/chain → fb.blockchain | fb.blockchain::STRUCTURE_BUILD_BLOCKCHAIN_CONFIG_V0; fb.topology::ASSERT_CC_NO_IMPLICIT_CHAINING_V0 | SATISFIED | upstream handoff: cross_subdomain_refs configuration structure defining blockchain subdomain parameters |
-| fb.blockchain topology establishing storage topology and store resolution for consensus operations | blockchain/chain → fb.topology | fb.blockchain::STRUCTURE_BUILD_BLOCKCHAIN_V0; blockchain::RB_PROPOSE_BLOCK_V0 workflow reference | SATISFIED | upstream handoff: cross_subdomain_refs structure artifact establishing blockchain subdomain storage topology |
-| fb.blockchain registry location for identity subdomain cross-references and actor resolution | blockchain/chain → fb.topology | fb.blockchain::STRUCTURE_REGISTRY_LOCATION_BLOCKCHAIN_V0; blockchain::RB_REGISTER_VALIDATOR_V0 workflow reference | SATISFIED | upstream handoff: cross_subdomain_refs structure artifact defining registry location for identity subdomain |
+| proposed blocks from the consensus loop | inbound | blockchain::RB_RUN_CONSENSUS_LOOP_V0 | SATISFIED | S2 belief #2 |
+| mint capability for genesis supply | outbound | blockchain::RB_MINT_V0 | SATISFIED | S3 REUSE |
+| wallet and actor registration for the Genesis Actor | outbound | blockchain::RB_CREATE_WALLET_V0 | SATISFIED | S3 REUSE |
 
 ---
 
@@ -116,9 +115,8 @@ A required register with no rows renders as `| NONE IDENTIFIED |`.
 <!-- register:pps_artifacts_requiring_action optional -->
 | FQDN | Current Status | Action (REPLACE, REVIEW, REUSE) | Source Finding |
 |------|----------------|----------------------------------|----------------|
-| blockchain::CC_FORM_BLOCK_V0 | canonical capability contract in PPS snapshot inventory | REUSE | upstream handoff: dependency_graph block commitment capability side effect reuse |
-| blockchain::EV_BLOCK_COMMITTED_V0 | canonical event contract in PPS snapshot inventory | REUSE | upstream handoff: dependency_graph block commitment capability side effect reuse for event journaling |
-| blockchain::CC_VALIDATE_MINT_POLICY_V0 | canonical policy validation contract in PPS snapshot inventory | REUSE | upstream handoff: constraint_register mint policy enforcement; blockchain::AC_SYSTEM_V0 for system-level genesis operations |
+| blockchain::STRUCTURE_BLOCKCHAIN_STORAGE_V0 | append-only block storage without commit semantics | REVIEW | S3 EXTEND storage |
+| blockchain::EV_BLOCK_COMMITTED_V0 | committed-block event exists but is not emitted by any operation | REUSE | S3 REUSE event |
 
 ---
 
@@ -129,13 +127,7 @@ A required register with no rows renders as `| NONE IDENTIFIED |`.
 <!-- register:boundary_rules optional -->
 | Rule Name | Statement | Source Finding |
 |-----------|-----------|----------------|
-| Single Genesis Execution Rule | Exactly one genesis block exists per chain and executes exactly once at bootstrap never replayed, establishing canonical monetary base of 1 million BachiCoin to Genesis Actor | upstream handoff: invariants single-execution semantics prevent supply duplication; blockchain::AC_SYSTEM_V0 for system-level single-execution |
-| Immutable Chain History Rule | Once a block commits to canonical history it cannot be altered or removed, preserving decentralized trust through unalterable record of all committed transactions | upstream handoff: invariants chain immutability; CR seed constraints #2 on immutability |
-| Closed Monetary System Rule | No supply enters or leaves the system except by protocol-defined rules, preventing external manipulation of chain state and inflationary attacks after genesis completion | upstream handoff: invariants closed monetary principle; blockchain::CC_VALIDATE_MINT_POLICY_V0 for post-genesis conservation |
-| Single Predecessor Linkage Rule | A committed block has exactly one predecessor except the genesis block, ensuring linear chain structure and unambiguous historical ordering without fork ambiguity in canonical history | upstream handoff: invariants single-predecessor linkage; blockchain::CC_FORM_BLOCK_V0 establishes this constraint |
-| Unique Commitment Rule | A committed block cannot be committed twice to the canonical chain, preserving immutability guarantee and preventing duplicate inclusion attacks on historical records | upstream handoff: invariants uniqueness constraint; blockchain::EV_BLOCK_COMMITTED_V0 for commit event semantics |
-| Cross-Subdomain Write Prohibition Rule | A store is written only by capabilities of its owning subdomain, preventing unauthorized cross-subdomain writes that could compromise integrity boundaries | upstream handoff: governance discipline cross-subdomain writes forbidden; fb.topology::ASSERT_CC_NO_IMPLICIT_CHAINING_V0 |
-| Storage Conformance Rule | All storage operations must conform to topology surface contracts for append-only, read, and write semantics with immutable compilation guarantees after deployment | upstream handoff: fb.topology::ASSERT_CC_STORAGE_OP_CONFORMANCE_V0; fb.topology::INVARIANT_TOPOLOGY_IMMUTABLE_AFTER_COMPILATION_V0 |
+| NONE IDENTIFIED |  |  |
 
 ---
 
@@ -146,12 +138,7 @@ A required register with no rows renders as `| NONE IDENTIFIED |`.
 <!-- register:governance_outcome optional business_language=capability -->
 | Capability | Owner Subdomain | Source Finding |
 |------------|-----------------|----------------|
-| create genesis block at bootstrap | blockchain/chain | upstream handoff: governance_scope chain CREATED; scope_boundary IN_SCOPE one-time bootstrap operation |
-| commit blocks to canonical chain immutably | blockchain/chain | upstream handoff: events Block Committed lifecycle meaning; governance_scope ADJACENT consensus_pos, orchestration |
-| maintain chain state with supply conservation after genesis | blockchain/chain | upstream handoff: invariants total supply conserved at 1 million BachiCoin; scope_boundary IN_SCOPE maintain chain state |
-| record consensus round outcome including skip decisions | blockchain/chain | upstream handoff: events Round Skipped lifecycle meaning; governance_scope ADJACENT orchestration, mempool |
-| append block lifecycle events to immutable journal | blockchain/chain | upstream handoff: scope_boundary IN_SCOPE append block lifecycle events; blockchain::CS_APPENDONLY_JSONL_V0 contract |
-| write committed blocks to immutable BLOCKS store | blockchain/chain | upstream handoff: scope_boundary IN_SCOPE write committed blocks; blockchain::CS_MUTABLE_JSON_V0 contract |
+| NONE IDENTIFIED |  |  |
 
 ---
 

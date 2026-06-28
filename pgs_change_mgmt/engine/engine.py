@@ -273,7 +273,7 @@ def run(
     """The single durable entry point: drive one governed authoring run.
 
     Example:
-        run(worker=QwenWorker(grounding), grounding=grounding, seed="blockchain_mempool")
+        run(worker=OllamaWorker(grounding), grounding=grounding, seed="blockchain_mempool")
     """
     engine = ChangeEngine(worker, grounding, evaluator=evaluator, runs_root=runs_root)
     return engine.run(seed, targets=targets, dest_root=dest_root, compile_oracle=compile_oracle)

@@ -1,13 +1,14 @@
 """DossierEngine — the staged S1→S7 dossier-authoring pipeline (Phase 5, dossier tier).
 
-The dossier pipeline ends at S7 (the Authoring Mandate). S8 (Authoring Manifest) is a
-POST-authoring artifact produced by the authoring tier after the .md artifacts are created from
-the S7 mandate, compiled, and tested — it is invokable here (`--stage 8`, renders the baseline)
-but is not part of the default run.
+The dossier pipeline ends at S7 (the Authoring Mandate). S8 (Build Sheet Set) is the construction
+projection — assembled deterministically from S2/S5/S6b/S7 (no new design) — and is invokable here
+but is not part of the default S1→S7 run. S9 (Construction Record) is NOT a dossier-engine stage:
+it is post-construction evidence produced by the Construction engine from the ACTUAL compiler
+verdicts (`construct_chain.render_s9`). The boundary is after S8 — authoring ends at the Build Sheet.
 
 Where `ChangeEngine` (Phase 4A) authors machine artifacts judged by the compiler, this drives
 the *dossier* tier: a worker authors each SDLC stage document (change request → … → authoring
-manifest) for a CR, and the bounded `gov_projection` is the handoff between stages — only the
+mandate) for a CR, and the bounded `gov_projection` is the handoff between stages — only the
 fields a downstream stage *declares* it consumes cross the seam (not the full prior document).
 That bounded handoff is the drift-killer the Phase-0 experiment confirmed.
 
@@ -37,7 +38,9 @@ from ..contracts import (
     fields_emitted_by, fields_consumed_by,
 )
 from ..evaluator import IdentityEvaluator
-from ..renderer.dossier_stage import is_structured_template, DossierStageRenderer, EVIDENCE_COLUMNS
+from ..renderer.dossier_stage import (
+    is_structured_template, DossierStageRenderer, EVIDENCE_COLUMNS, unfilled_prose_placeholders,
+)
 from .run_log import RunLog, now_stamp
 
 PKG_REPO = Path(__file__).resolve().parents[2]
@@ -49,14 +52,15 @@ AGENT_CONTEXT = TEMPLATES / "0_agent_context_template_v0.md"
 STAGE_BASENAME: dict[str, str] = {
     "1": "1_change_request", "2": "2_domain_model", "3": "3_analysis_loop",
     "4": "4_business_model", "5": "5_business_intent", "6": "6_governance_intent",
-    "6b": "6b_design_intent", "7": "7_authoring_mandate", "8": "8_authoring_manifest",
+    "6b": "6b_design_intent", "7": "7_authoring_mandate", "8": "8_build_sheet",
 }
-# The dossier pipeline ends at S7 (the Authoring Mandate) — the last artifact derivable from the
-# dossier alone. S8 (Authoring Manifest) is a POST-authoring artifact: it records as-built reality
-# (deviations, as-designed-vs-as-built, conformance, dividend metrics) that exists only AFTER the
-# .md artifacts are authored from the S7 mandate, compiled, and tested. S8 is produced by the
-# authoring tier — runnable here via `--stage 8` (which renders the pre-authoring baseline), but it
-# is NOT part of the default dossier run. STAGE_BASENAME still maps "8" so the stage is invokable.
+# The dossier pipeline ends at S7 (the Authoring Mandate) — the last artifact authored by the dossier
+# tier. S8 (Build Sheet Set) is the construction projection: a deterministic assembler turns S2/S5/S6b/
+# S7 into per-artifact construction obligations (no new design) — produced by the assembler tier (the
+# `_project_build_sheet_stage` projector), not the structured-worker path. It is invokable here but is
+# not part of the default run. S9 (Construction Record) is NOT a dossier stage — it is post-construction
+# evidence produced by the Construction engine (`construct_chain.render_s9`) from the actual compiler
+# verdicts, and is intentionally absent from STAGE_BASENAME.
 STAGE_ORDER: tuple[str, ...] = ("1", "2", "3", "4", "5", "6", "6b", "7")
 
 # S2 anchors on the imperative objective, not the appended template prose. A stage whose
@@ -102,6 +106,77 @@ def stars(n: int) -> str:
     return "★" * n + "☆" * (5 - n)
 
 
+# ---- verification-spine admissibility gate (Fix A — Phase 0A) -------------------------------
+# A stage that emits `belief_verification` (S2) is a *verification* stage: the belief ledger is
+# the spine that bounds every other register. Tier 1 below is the structural-completeness gate —
+# every incoming S1 System Belief must produce exactly one disposition row. An empty or partial
+# spine is INVALID, and an INVALID stage must not emit a consumable handoff (compiler discipline).
+# Tier 2 (S3+ may consume only VERIFIED facts; NOT_FOUND / INSUFFICIENT_EVIDENCE are unresolved,
+# not governed truth) is deferred to the Governed-Inference framework — here it is reported as a
+# data point, not enforced, so discovery is never collapsed into enumeration.
+
+def _norm_belief(s: Any) -> str:
+    return re.sub(r"\s+", " ", str(s)).strip().lower()
+
+
+def verification_spine_gaps(
+    system_beliefs: list[dict[str, Any]],
+    belief_rows: list[dict[str, Any]],
+    allowed_results: tuple[str, ...],
+) -> list[str]:
+    """Tier 1 — structural completeness of `belief_verification`.
+
+    Returns a list of human-readable defects (empty ⇒ the spine is admissible). One disposition
+    row per incoming S1 System Belief, each carrying a result in the controlled vocabulary; no
+    missing rows, no blanks, no duplicates. (Belief↔row association is by count + dedup, not
+    cross-text equality with S1 — paraphrase drift makes text-equality unreliable.)"""
+    defects: list[str] = []
+    n_in = len(system_beliefs)
+    if n_in == 0:
+        return defects  # no beliefs handed in ⇒ nothing to verify (not a spine concern)
+    n_out = len(belief_rows)
+    if n_out == 0:
+        return [f"belief_verification is empty — {n_in} System Belief(s) handed in went unverified "
+                "(the spine produced no rows)"]
+    if n_out != n_in:
+        defects.append(f"belief_verification has {n_out} row(s) for {n_in} System Belief(s) — "
+                       "expected exactly one disposition per belief")
+    seen: dict[str, int] = {}
+    for idx, row in enumerate(belief_rows):
+        belief = _norm_belief(row.get("belief", ""))
+        result = str(row.get("result", "")).strip()
+        if not belief:
+            defects.append(f"belief_verification[{idx}]: blank belief")
+        else:
+            seen[belief] = seen.get(belief, 0) + 1
+        if result not in allowed_results:
+            defects.append(f"belief_verification[{idx}]: result {result or '(blank)'!r} is not a "
+                           f"disposition {list(allowed_results)}")
+    dups = sum(1 for c in seen.values() if c > 1)
+    if dups:
+        defects.append(f"belief_verification: {dups} duplicate belief row(s) — each belief must "
+                       "carry exactly one disposition")
+    return defects
+
+
+def belief_result_counts(
+    belief_rows: list[dict[str, Any]], allowed_results: tuple[str, ...]
+) -> dict[str, int]:
+    """Tier 2 data point — the VERIFIED / NOT_FOUND / INSUFFICIENT_EVIDENCE split of the spine."""
+    counts = {r: 0 for r in allowed_results}
+    for row in belief_rows:
+        r = str(row.get("result", "")).strip()
+        if r in counts:
+            counts[r] += 1
+    return counts
+
+
+# Halt reasons (Patch 2 — distinct architectural failures, kept apart for metrics).
+HALT_EMPTY_EMIT = "EMPTY_EMIT_PROJECTION"          # stage declared emit fields but produced none
+HALT_SPINE_INVALID = "VERIFICATION_SPINE_INVALID"  # output produced, belief spine incomplete
+DEFAULT_BELIEF_RESULTS = ("VERIFIED", "NOT_FOUND", "INSUFFICIENT_EVIDENCE")
+
+
 def rate_stage(sr: "StageResult") -> int:
     """Deterministic 0–5 figure-of-merit rating (5 best, 0 = abandoned).
 
@@ -124,6 +199,10 @@ def rate_stage(sr: "StageResult") -> int:
     # lossless handoff (no `missing`) and zero fabrication.
     if sr.structured and sr.coverage < 0.5:
         score -= 1
+    if sr.incomplete_sections:        # a required human-authored section shipped blank
+        score -= 1
+    if sr.unresolved_cells:           # a declared UNRESOLVED governed hole (Phase 1) — a gap,
+        score -= 1                     # not a defect: scored, surfaced, non-halting
     return max(0, min(5, score))
 
 
@@ -169,9 +248,34 @@ class StageResult:
     # audit-trail completeness. None when not applicable.
     governed_coverage: float | None = None
     audit_coverage: float | None = None
+    # admissibility (Patch: contract-semantic). `halt_reason` is set when the stage may not hand a
+    # consumable projection downstream — EMPTY_EMIT_PROJECTION (produced nothing) or
+    # VERIFICATION_SPINE_INVALID (spine incomplete). spine_defects/belief_counts are S2 specifics.
+    halt_reason: str | None = None
+    spine_defects: list[str] = field(default_factory=list)
+    belief_counts: dict[str, int] | None = None
+    # completeness: required human-authored prose sections that shipped as unfilled `[...]`
+    # placeholders (e.g. S5 Purpose). A gap (human must supply), not a propagation risk —
+    # so it marks the stage not-ok and is reported, but does NOT halt the pipeline.
+    incomplete_sections: list[str] = field(default_factory=list)
+    # Provenance-Ratchet Phase 1: register cells the worker declared as `UNRESOLVED` governed holes
+    # (the register-row parallel of incomplete_sections). A typed, owned hole — surfaced + scored,
+    # but admissible: it hands off downstream as a visible hole (Phase 2/3 resolve it) and does NOT
+    # halt. A declared hole is the legal alternative to fabricating or silently leaving a cell blank.
+    unresolved_cells: list[str] = field(default_factory=list)
+
+    @property
+    def inadmissible(self) -> bool:
+        return self.halt_reason is not None
 
     @property
     def ok(self) -> bool:
+        if self.inadmissible:         # an inadmissible stage is never ok
+            return False
+        if self.incomplete_sections:  # a required human section shipped blank
+            return False
+        if self.unresolved_cells:     # a declared governed hole awaits clarification
+            return False
         if self.structured:
             return self.doc_path is not None and not self.oracle_issues \
                 and self.identity.get("E_FABRICATION", 0) == 0
@@ -192,6 +296,55 @@ class DossierResult:
     @property
     def ok(self) -> bool:
         return bool(self.stages) and all(s.ok for s in self.stages)
+
+
+def _project_build_sheet_stage(engine: "DossierEngine", cfg: "DossierSeedConfig",
+                               stage: str, log: RunLog) -> StageResult:
+    """Stage 8 projector — S8 is ASSEMBLED (a governed projection), not authored by a worker.
+
+    Reads the governed upstream dossier documents (S5/S6b/S7) on disk, projects the Build Sheet Set,
+    runs the static `ASSERT_CONSTRUCTION_*` gate, renders the document, and persists the handoff
+    (`build_sheets` + `gap_census`) for S9. Registered in STAGE_PROJECTORS — the engine dispatches by
+    stage, never `if stage == 8`.
+    """
+    import os
+    from .build_sheet import project_build_sheets, render_markdown, load_registers, load_entity_fields
+    from ..evaluator.build_sheet_oracle import assert_construction_closed
+
+    # AUTHORITATIVE input: the governed JSON handoffs (S5/S6b/S7), each guaranteed faithful to its
+    # rendered doc by the per-stage PROJECTION_FIDELITY gate. S8 assembles from declared structured
+    # projections and never re-parses narrative markdown (Projection Completeness Principle).
+    up = load_registers(cfg.output_dir / "_handoff")
+    # ground the governed field vocabulary from compiled entities (zero-invention construction source)
+    entity_fields = load_entity_fields(os.environ.get("PGS_WORKSPACE", ""), domain=cfg.domain)
+    model = project_build_sheets(up, domain=cfg.domain, subdomain=cfg.subdomain, entity_fields=entity_fields)
+    issues = assert_construction_closed(model)
+    doc = render_markdown(model)
+
+    doc_path = cfg.output_dir / f"{STAGE_BASENAME[stage]}_{cfg.domain}_{cfg.subdomain}_v0.md"
+    doc_path.write_text(doc)
+    sr = StageResult(stage=stage, structured=False, doc_path=doc_path)
+    sr.oracle_issues = [f"{code}: {msg}" for code, msg in issues]
+    sr.coverage = 1.0 if not issues else 0.0
+    sr.governed_coverage = sr.coverage
+
+    proj = GovProjection(stage=stage, values={
+        "build_sheets": [{"code": s.code, "kind": s.kind, "readiness": s.readiness} for s in model.sheets],
+        "gap_census": [{"gid": g.gid, "gap_class": g.gap_class, "field": g.field} for g in model.gap_census],
+    })
+    engine._save_handoff(cfg, stage, proj)
+    sr.emitted = sorted(proj.values)
+    log.event("stage_figure_of_merit", stage=stage, doc=str(doc_path), structured=False,
+              doc_chars=len(doc), emitted=sr.emitted, oracle_issues=sr.oracle_issues,
+              coverage=sr.coverage, governed_coverage=sr.governed_coverage, readiness=model.readiness())
+    if engine.verbose:
+        print(color("bold", f"\n┌─ Stage {stage} (build_sheet projection) ─ {len(model.sheets)} sheets, "
+                            f"readiness={model.readiness()}, {len(issues)} open issue(s)"))
+    return sr
+
+
+# Stage → projector (plugin dispatch; a projected stage bypasses the structured-worker path).
+STAGE_PROJECTORS = {"8": _project_build_sheet_stage}
 
 
 class DossierEngine:
@@ -225,6 +378,18 @@ class DossierEngine:
         for stage in order:
             sr = self._run_stage(cfg, stage, log)          # handoff persisted to disk per stage
             result.stages.append(sr)
+            if sr.inadmissible:
+                # Hard orchestration gate: an inadmissible stage (empty emit-projection, or an
+                # incomplete verification spine) produces no consumable handoff and halts the
+                # pipeline before any downstream stage can consume it. Re-run to regenerate, resume.
+                detail = "; ".join(sr.spine_defects) if sr.spine_defects else \
+                    "stage declared handoff fields but emitted none"
+                log.event("pipeline_halt", stage=stage, reason=sr.halt_reason, detail=detail)
+                if self.verbose:
+                    print(color("red",
+                        f"\n■ HALT — Stage {stage} INADMISSIBLE [{sr.halt_reason}]: no consumable "
+                        f"handoff persisted; downstream stages not run.\n   " + detail))
+                break
         log.finalize(ok=result.ok,
                      stages_ok=sum(s.ok for s in result.stages), n_stages=len(result.stages))
         return result
@@ -232,6 +397,15 @@ class DossierEngine:
     # ---- one stage -------------------------------------------------------
 
     def _run_stage(self, cfg: DossierSeedConfig, stage: str, log: RunLog) -> StageResult:
+        # plugin dispatch: a projected stage (e.g. S8 Build Sheet) is assembled, not worker-authored.
+        if stage in STAGE_PROJECTORS:
+            return STAGE_PROJECTORS[stage](self, cfg, stage, log)
+        if stage not in STAGE_BASENAME:
+            raise ValueError(
+                f"stage {stage!r} is not a dossier-engine stage — S9 (Construction Record) is "
+                f"post-construction evidence produced by the Construction engine "
+                f"(construct_chain.render_s9), not authoring. "
+                f"valid worker stages: {sorted(STAGE_BASENAME)}; projected: {sorted(STAGE_PROJECTORS)}")
         template = (cfg.templates_dir / f"{STAGE_BASENAME[stage]}_template_v0.md").read_text()
         task = self._stage_input(cfg, stage, template)
         bounded = sorted(task.input_projection.values)
@@ -245,6 +419,7 @@ class DossierEngine:
         sr = StageResult(stage=stage, structured=is_structured_template(template))
         sr.telemetry = output.findings[0] if output.findings else ""
         doc_path = cfg.output_dir / f"{STAGE_BASENAME[stage]}_{cfg.domain}_{cfg.subdomain}_v0.md"
+        belief_allowed = DEFAULT_BELIEF_RESULTS   # spine result vocabulary (from the template below)
 
         if sr.structured:
             # structured intent → deterministic renderer + structural oracle (no free-form doc).
@@ -256,8 +431,13 @@ class DossierEngine:
             # express (referenced⇒declared, collision, count reconciliation, near-duplicate spelling).
             # Issues mark the offending register dirty → governed coverage drops → no 5/5 on a typo.
             if stage == "6b":
-                from ..evaluator.design_intent_oracle import check_design_intent
+                from ..evaluator.design_intent_oracle import check_design_intent, check_cc_composition
                 for rid, msg in check_design_intent(data, self.grounding):
+                    oracle.issues.append(msg)
+                    oracle.dirty.add(rid)
+                # §6 Capability Composition integrity: composed CC declared+routed, steps are
+                # declared CT/CS, kind matches family (optional register — empty ⇒ no issues).
+                for rid, msg in check_cc_composition(data, self.grounding):
                     oracle.issues.append(msg)
                     oracle.dirty.add(rid)
                 oracle.ok = not oracle.issues
@@ -269,6 +449,14 @@ class DossierEngine:
                     oracle.issues.append(msg)
                     oracle.dirty.add(rid)
                 oracle.ok = not oracle.issues
+            # Governing fence (2026-06-24): S1 §12 Out of Scope is now forwarded to the discovery/
+            # model stages — enforce it deterministically. A modeled capability that names a deferred
+            # item marks its register dirty → governed coverage drops. (Lexical, no semantic oracle.)
+            from ..evaluator.scope_oracle import check_scope_boundary
+            for rid, msg in check_scope_boundary(stage, data, dict(task.input_projection.values)):
+                oracle.issues.append(msg)
+                oracle.dirty.add(rid)
+            oracle.ok = not oracle.issues
             doc = (renderer.render(data)
                    .replace("[domain]", cfg.domain).replace("[subdomain]", cfg.subdomain))
             # handoff = the registers that are declared gov_projection emit-fields for this stage
@@ -276,12 +464,18 @@ class DossierEngine:
             proj = GovProjection(stage=stage, values={k: v for k, v in data.items() if k in emit})
             sr.oracle_issues = oracle.issues
             sr.missing = oracle.empty_required
+            sr.unresolved_cells = list(oracle.unresolved)   # Phase 1 declared holes (gap signal)
             sr.coverage = 1.0 if oracle.ok else 0.0
             # split coverage (strict/binary per partition): the S4-bound emit registers vs the
             # doc-only audit registers — separates governance integrity from audit completeness.
             audit_ids = set(renderer.registers) - emit
             sr.governed_coverage = 0.0 if (oracle.dirty & emit) else 1.0
             sr.audit_coverage = (0.0 if (oracle.dirty & audit_ids) else 1.0) if audit_ids else None
+            # capture the spine result vocabulary from the template (single source of truth);
+            # the admissibility gate (after this branch) uses it.
+            if "belief_verification" in renderer.registers:
+                belief_allowed = renderer.registers["belief_verification"].enums.get(
+                    "result", DEFAULT_BELIEF_RESULTS)
         else:
             proj = GovProjection(stage=stage, values=dict(output.registers))
             doc = self._document(output)
@@ -289,9 +483,59 @@ class DossierEngine:
             sr.extra = proj.extra_fields()
             sr.coverage = self._template_coverage(doc, template)
 
+        # ── admissibility gates (contract-semantic; apply to any stage that declares emit fields,
+        #    structured or not — Patch 1) ──────────────────────────────────────────────────────
+        # (1) EMPTY_EMIT_PROJECTION — the stage declared handoff fields but produced none. An empty
+        #     projection has no business meaning and is never consumable (compiler rule: no AST →
+        #     no object file). (2) VERIFICATION_SPINE_INVALID — output WAS produced but the belief
+        #     spine is structurally incomplete. Distinct reasons, kept apart for metrics. We do NOT
+        #     (yet) halt on "a required register is empty" — that is a larger experiment (Patch 4);
+        #     the only universally safe invariant today is empty-projection.
+        emit_fields = {f.field for f in fields_emitted_by(stage)}
+        if emit_fields and not proj.values:
+            sr.halt_reason = HALT_EMPTY_EMIT
+        elif "belief_verification" in emit_fields:
+            belief_rows = proj.values.get("belief_verification") or []
+            system_beliefs = task.input_projection.values.get("system_beliefs") or []
+            sr.belief_counts = belief_result_counts(belief_rows, belief_allowed)
+            sr.spine_defects = verification_spine_gaps(system_beliefs, belief_rows, belief_allowed)
+            if sr.spine_defects:
+                sr.halt_reason = HALT_SPINE_INVALID
+                sr.oracle_issues = list(sr.oracle_issues) + sr.spine_defects
+                sr.governed_coverage = 0.0
+
+        # Completeness: required human-authored prose sections that shipped as unfilled `[...]`
+        # placeholders (irreducible human knowledge — Purpose, Identity). A gap, not corruption,
+        # and it does not flow to a consuming stage, so it marks the stage not-ok and is reported,
+        # but does NOT halt (no resolution path until human injection exists).
+        sr.incomplete_sections = unfilled_prose_placeholders(doc)
+
         doc_path.write_text(doc or "(no document produced)")
         sr.doc_path = doc_path if doc.strip() else None
-        self._save_handoff(cfg, stage, proj)   # standalone-reviewable bounded handoff
+        if sr.inadmissible:
+            # INADMISSIBLE → keep diagnostics (the stage stays inspectable), persist NO consumable
+            # handoff, and remove any stale handoff from a prior run so it cannot be consumed.
+            stem = f"{STAGE_BASENAME[stage]}_{cfg.domain}_{cfg.subdomain}"
+            # Capture the worker's RAW final output and the register keys it actually returned. The
+            # placeholder doc hides WHY the stage was empty; this preserves the evidence needed to
+            # tell prose-instead-of-registers (capability) from a stall from malformed JSON from
+            # wrong/empty register keys — the failed stage must remain diagnosable.
+            raw = "\n\n".join(output.findings) or "(worker produced no content)"
+            raw_file = f"{stem}_raw_output.txt"
+            (cfg.output_dir / raw_file).write_text(raw)
+            (cfg.output_dir / f"{stem}_diagnostics.json").write_text(json.dumps(
+                {"halt_reason": sr.halt_reason, "stage": stage, "oracle_issues": sr.oracle_issues,
+                 "missing": sr.missing, "spine_defects": sr.spine_defects,
+                 "belief_counts": sr.belief_counts,
+                 "raw_register_keys": sorted(output.registers),
+                 "raw_output_chars": len(raw), "raw_output_file": raw_file}, indent=2, default=str))
+            if sr.spine_defects:
+                (cfg.output_dir / f"{stem}_spine_invalid.txt").write_text("\n".join(sr.spine_defects))
+            hp = self._handoff_path(cfg, stage)
+            if hp.exists():
+                hp.unlink()
+        else:
+            self._save_handoff(cfg, stage, proj)   # standalone-reviewable bounded handoff
 
         sr.emitted = sorted(proj.values)
         verdict = self.evaluator.evaluate(proj, stage=stage)
@@ -301,7 +545,10 @@ class DossierEngine:
                   doc_chars=len(doc), emitted=sr.emitted, missing=sr.missing,
                   oracle_issues=sr.oracle_issues, identity=sr.identity,
                   coverage=round(sr.coverage, 2), governed_coverage=sr.governed_coverage,
-                  audit_coverage=sr.audit_coverage, telemetry=sr.telemetry, rating=sr.rating, ok=sr.ok)
+                  audit_coverage=sr.audit_coverage, telemetry=sr.telemetry, rating=sr.rating, ok=sr.ok,
+                  halt_reason=sr.halt_reason, belief_counts=sr.belief_counts,
+                  incomplete_sections=sr.incomplete_sections,
+                  unresolved_cells=sr.unresolved_cells)
         if not sr.doc_path:
             (log.run_dir / f"{stage}_raw_output.txt").write_text(
                 "\n\n".join(output.findings) or "(empty)")
@@ -316,6 +563,15 @@ class DossierEngine:
             notes.append(color("red", f"missing {sr.missing}"))
         if sr.identity.get("E_FABRICATION", 0):
             notes.append(color("red", f"{sr.identity['E_FABRICATION']} FABRICATION"))
+        # Surface gaps at the console (Phase 1): declared holes + unfilled prose sections. Both
+        # mark the stage not-ok; printing them here is where the human sees what needs supplying.
+        gap_kinds = []
+        if sr.unresolved_cells:
+            gap_kinds.append(f"{len(sr.unresolved_cells)} UNRESOLVED")
+        if sr.incomplete_sections:
+            gap_kinds.append(f"{len(sr.incomplete_sections)} prose")
+        if gap_kinds:
+            notes.append(color("yellow", f"⚠ gaps: {', '.join(gap_kinds)}"))
         a = sr.identity.get("A_EXACT", 0)
         notes.append(f"{a} grounded")
         if sr.structured and sr.governed_coverage is not None:
@@ -328,6 +584,22 @@ class DossierEngine:
         doc_state = "written" if sr.doc_path else color("red", "NO DOCUMENT (abandoned)")
         print(color(flag, f"└─ {stars(sr.rating)} {sr.rating}/5  {doc_state}  — ") +
               "  ".join(n for n in notes if n))
+        self._print_gaps(sr, doc_path)
+
+    def _print_gaps(self, sr: StageResult, doc_path: Path) -> None:
+        """Name each gap and give a resolution hook (WHAT is open + HOW to resolve it). Until the
+        governed Clarification Protocol (Phase 2) exists, the hook is the manual path: supply the
+        value in the document and re-run the stage. A declared hole is a question awaiting an answer,
+        not a defect — so it is printed in yellow, indented under the stage footer."""
+        doc = doc_path.name
+        for cell in sr.unresolved_cells:
+            print(color("yellow", f"   ⚠ gap (declared hole)  {cell}"))
+            print(f"      └ resolve: supply the value for `{cell}` in {doc} (replace the "
+                  f"UNRESOLVED token; keep its Source Finding), then re-run --stage {sr.stage}")
+        for section in sr.incomplete_sections:
+            print(color("yellow", f"   ⚠ gap (unfilled section)  {section}"))
+            print(f"      └ resolve: write the {section.split(' — ')[0].strip()} prose in {doc}, "
+                  f"then re-run --stage {sr.stage}")
 
     # ---- task framing ----------------------------------------------------
 
@@ -400,6 +672,12 @@ class DossierEngine:
             "whichever THIS register declares) — never in a description column. EVERY row MUST "
             "carry non-empty traceability in that column. That is the required traceability and "
             "the ONLY place a protocol identifier belongs at this stage.",
+            "DECLARED HOLES — if a REQUIRED cell has no basis in the seed (human truth) and none "
+            "in the grounded snapshot — you genuinely cannot derive it — write the single token "
+            "`UNRESOLVED` in that cell and explain WHY it is open in this row's Source Finding. "
+            "NEVER fabricate a value to fill it; NEVER leave it blank. A declared hole is a "
+            "governed gap a human will resolve; a guess is a violation. Use this sparingly — only "
+            "for irreducible business knowledge you were not given.",
             "Emit exactly these registers:",
             "\n".join(specs),
         ]
@@ -502,7 +780,7 @@ def run_dossier(worker: Worker, grounding: GroundingProvider, seed: str | Dossie
 
 
 def tool_event_printer(kind: str, **f: Any) -> None:
-    """Wire as QwenWorker(on_event=...) for the live R/Y/G grounding stream."""
+    """Wire as OllamaWorker(on_event=...) for the live R/Y/G grounding stream."""
     if kind == "tool_call":
         dot = _DOT[f["flag"]]
         args = ", ".join(f"{k}={v!r}" for k, v in (f.get("args") or {}).items())
@@ -514,3 +792,8 @@ def tool_event_printer(kind: str, **f: Any) -> None:
     elif kind == "convergence_forced":
         print(color("yellow", "   ⚠ tool budget exhausted — forced finalization "
                               f"({'produced output' if f.get('produced') else 'still empty'})"))
+    elif kind == "model_error":
+        # surface transport/auth failures live (e.g. HTTP 401/429) — otherwise they only show up
+        # as a terminal `reason=model_error` with no detail.
+        print(color("red", f"   ✖ model_error (attempt {f.get('attempt')}): "
+                           f"{str(f.get('error'))[:200]}"))

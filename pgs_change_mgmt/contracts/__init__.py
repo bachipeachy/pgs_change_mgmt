@@ -26,6 +26,28 @@ from .worker import StageInput, StageOutput, Worker
 from .grounding import GroundingProvider
 from .evaluator import Evaluator, Verdict
 from .renderer import Renderer
+from .provenance import (
+    Clarification,
+    is_admissible,
+    PROVENANCE_TYPES,
+    DISPOSITIONS,
+    OWNERS,
+    PRIORITIES,
+    SEED,
+    GROUNDED,
+    INFERRED,
+    CLARIFIED,
+    ACCEPTED,
+    REJECTED,
+    PENDING,
+    HUMAN,
+    SNAPSHOT,
+    GOVERNANCE,
+    CRITICAL,
+    IMPORTANT,
+    OPTIONAL,
+    UNRESOLVED,
+)
 
 __all__ = [
     "CLOSURE",
@@ -42,4 +64,25 @@ __all__ = [
     "StageOutput",
     "Verdict",
     "Worker",
+    # provenance / governed-inference (Phase 1)
+    "Clarification",
+    "is_admissible",
+    "PROVENANCE_TYPES",
+    "DISPOSITIONS",
+    "OWNERS",
+    "PRIORITIES",
+    "SEED",
+    "GROUNDED",
+    "INFERRED",
+    "CLARIFIED",
+    "ACCEPTED",
+    "REJECTED",
+    "PENDING",
+    "HUMAN",
+    "SNAPSHOT",
+    "GOVERNANCE",
+    "CRITICAL",
+    "IMPORTANT",
+    "OPTIONAL",
+    "UNRESOLVED",
 ]

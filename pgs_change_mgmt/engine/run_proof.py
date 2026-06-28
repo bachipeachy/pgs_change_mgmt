@@ -15,7 +15,7 @@ import argparse
 import sys
 
 from ..grounding import PiGroundingProvider
-from ..worker import QwenWorker
+from ..worker import OllamaWorker
 from .engine import run
 from .oracle import compiler_oracle
 
@@ -38,7 +38,7 @@ def main(argv: list[str] | None = None) -> int:
     print(f"seed={args.seed}  model={args.model}  oracle={'off' if args.no_oracle else 'compiler'}"
           f"  targets={targets or 'all'}  max_iters={args.max_iters}\n")
 
-    result = run(QwenWorker(g, model=args.model, max_iters=args.max_iters), g, args.seed,
+    result = run(OllamaWorker(g, model=args.model, max_iters=args.max_iters), g, args.seed,
                  targets=targets, compile_oracle=oracle)
 
     print(f"\nCLEAN RUN: {result.ok}")

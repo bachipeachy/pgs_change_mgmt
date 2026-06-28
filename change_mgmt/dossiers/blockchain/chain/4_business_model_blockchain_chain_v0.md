@@ -90,35 +90,34 @@ found in a content cell.
 ### Actors (actors)
 | Actor | Role | Authority Class | Source Finding |
 |-------|------|-----------------|----------------|
-| Genesis Actor | Initial bootstrap authority that receives genesis supply at chain initialization | bootstrap_authority | CR seed §1 CR Type: Genesis creates initial monetary state; blockchain::AC_SYSTEM_V0 for system-level operations |
-| Validator | Participates in consensus rounds by proposing and attesting to blocks | consensus_participant | blockchain::RB_REGISTER_VALIDATOR_V0; blockchain::CC_QUERY_ELIGIBLE_VALIDATORS_V0 |
-| Enduser | Submits transactions and interacts with the canonical ledger for value transfers | ledger_participant | blockchain::AC_ENDUSER_V0; blockchain::WF_SUBMIT_TRANSACTION_V0 |
-| System | Performs system-level operations including block commitment and chain state maintenance | system_operator | blockchain::AC_SYSTEM_V0; blockchain::RB_PROPOSE_BLOCK_V0 |
+| Genesis Actor | Receives the initial minted supply at bootstrap and owns the MINT wallet thereafter. | SYSTEM | S1 vocab; S2 entity Genesis Actor |
+| Proposer | Validator selected per round to produce a proposed block that the chain then commits. | SYSTEM | S2 entity Proposer |
 
 <!-- register:bm_entities business_language -->
 ### Entities (bm_entities)
 | Entity | Description | Store Model | Source Finding |
 |--------|-------------|-------------|----------------|
-| Block Record | Immutable record of a committed block containing transactions, proposer information, and cryptographic linkage to predecessor | immutable_store | blockchain::CC_FORM_BLOCK_V0; blockchain::STRUCTURE_BLOCKCHAIN_STORAGE_V0 |
-| Consensus Round History | Historical record of consensus rounds including proposer selections, attestations, and round outcomes | immutable_store | blockchain::CC_RECORD_CONSENSUS_ROUND_V0; blockchain::RB_PROPOSE_BLOCK_V0 |
-| Chain State Ledger | Current authoritative state of the canonical ledger including committed block history and wallet balances | immutable_store | blockchain::CC_FORM_BLOCK_V0; blockchain::RB_PROPOSE_BLOCK_V0 |
-| Block Events Journal | Append-only journal of block lifecycle events including commitment and finalization records | append_only_store | blockchain::CC_APPENDONLY_JSONL_V0; blockchain::EV_BLOCK_COMMITTED_V0 |
+| Chain | The authoritative append-only ledger of committed blocks that serves as canonical history. | append-only ledger of committed blocks; lifecycle Uninitialized -> Active | S2 entity: Chain |
+| Block | A unit of the ledger produced by a proposer, carrying the transactions of its round. | immutable once committed (append-only canonical record); transient while proposed | S2 entity: Block |
+| Proposed Block | A block produced in the consensus loop that is not yet committed and not authoritative. | transient pre-commit candidate (Proposed lifecycle state) | S2 entity: Proposed Block |
+| Genesis Block | The chain's first block, containing the initial mint to the Genesis Actor; created once at bootstrap. | first committed block of the canonical ledger (Created Once) | S2 entity: Genesis Block |
+| Genesis Actor | The permanent actor receiving the initial minted supply and owning the MINT wallet thereafter. | actor record with permanent minting authority at genesis | S2 entity: Genesis Actor |
+| BachiCoin | The system's unit of value; a closed monetary supply conserved at 1,000,000 total. | balance tracked in wallet records | S2 entity: BachiCoin |
+| Proposer | The validator selected to produce a block in a given round. | validator record selected per round by eligibility | S2 entity: Proposer |
 
 <!-- register:resources optional business_language -->
 ### Resources
 | Resource | Description | Source Finding |
 |----------|-------------|----------------|
-| Blockchain Storage Structure | Storage infrastructure supporting BLOCKS, BLOCK_EVENTS, and other chain subdomain stores with immutable access patterns | blockchain::STRUCTURE_BLOCKCHAIN_STORAGE_V0 |
-| Mutable JSON Store Access | Capability for writing to mutable blockchain state including block records and ledger entries | CS_MUTABLE_JSON_V0; blockchain::RB_PROPOSE_BLOCK_V0 |
-| Append-Only Event Journal | Immutable event logging capability for recording chain lifecycle events without modification or deletion | CS_APPENDONLY_JSONL_V0; blockchain::CC_FORM_BLOCK_V0 |
+| NONE IDENTIFIED |  |  |
 
 <!-- register:events business_language -->
 ### Events (events)
 | Event | Trigger | Lifecycle Meaning | Source Finding |
 |-------|---------|-------------------|----------------|
-| Genesis Completed | Chain bootstrap operation completes genesis block creation and initial state initialization | Marks the single genesis execution that establishes canonical chain, immutability constraints, and fixed supply of 1 million BachiCoin | CR seed §8 Business Invariants #2; blockchain::AC_SYSTEM_V0 |
-| Block Committed to Canonical Chain | Consensus round concludes with block attestation and commitment decision | Proposed block becomes immutable history on the canonical ledger, establishing cryptographic linkage to predecessor block | blockchain::EV_BLOCK_COMMITTED_V0; blockchain::CC_FORM_BLOCK_V0 |
-| Round Skipped | No eligible proposer or failed proposal in consensus round | Consensus round produces no committed block, advancing to next slot while preserving chain continuity | blockchain::CC_SKIP_ROUND_V0; blockchain::WF_PROPOSE_BLOCK_V0 |
+| Genesis Created | Once, at bootstrap, before the consensus loop runs. | Establishes the chain and the initial monetary state. | S1 business_events |
+| Block Proposed | A proposer produces a block in a round. | A candidate block exists; not yet authoritative. | S1 business_events |
+| Block Committed | A proposed block is committed to the canonical chain. | The block and its transactions become authoritative and immutable. | S1 business_events |
 
 *A relationship implies a capability. Name that capability as a **business need** in Capability
 Need (business language — no artifact names). If an existing or candidate artifact is relevant,
@@ -128,10 +127,7 @@ cite its FQDN in **Source Finding** only — never in the Capability Need cell.*
 ### Relationships (Candidate Capabilities)
 | Subject | Verb | Object | Capability Need | Source Finding |
 |---------|------|--------|-----------------|----------------|
-| Genesis Actor | receives initial supply from | Chain at bootstrap | create genesis block and initialize canonical ledger state with fixed 1 million BachiCoin supply | CR seed §7 Constraints #3; blockchain::AC_SYSTEM_V0 |
-| Validator | participates in consensus rounds to propose and attest blocks for | Chain state maintenance | select proposer, form block from pending transactions, record round outcome including skip or commit decision | blockchain::CC_QUERY_ELIGIBLE_VALIDATORS_V0; blockchain::CC_SELECT_PROPOSER_V0 |
-| Enduser | submits transactions to be included in blocks for | Chain state updates via committed block formation | collect pending transactions, form proposed block with transaction set, commit to canonical chain immutably | blockchain::CC_QUERY_PENDING_TRANSACTIONS_V0; blockchain::CC_FORM_BLOCK_V0 |
-| System | commits blocks and maintains ledger state for | Canonical chain history | commit proposed block to immutable canonical chain, enforce immutability constraints on committed blocks | blockchain::EV_BLOCK_COMMITTED_V0; blockchain::RB_PROPOSE_BLOCK_V0 |
+| NONE IDENTIFIED |  |  |  |  |
 
 ---
 
@@ -139,15 +135,23 @@ cite its FQDN in **Source Finding** only — never in the Capability Need cell.*
 
 *Every capability discovered during Analysis Loop. CRITICAL = must author this CR. ADVISORY = should author. SATISFIED = exists in PPS. Capability column is business language — no FQDNs.*
 
+> **Release boundary.** A capability deferred in `out_of_scope` (S1 §12) is NOT part of this CR — do
+> not list it here in any status, and never promote it to a CRITICAL gap. The oracle drops governed
+> coverage for a capability row that names a deferred item.
+
 <!-- register:capability_graph business_language -->
 | Capability | Source Finding | Status | Gap Register Entry | Notes |
 |-----------|----------------|--------|--------------------|-------|
-| create genesis block at bootstrap | CR seed §8 Business Invariants #1,2,3; authoring_decisions: Genesis creation is distinct one-time operation separate from regular consensus operations | CRITICAL | GAP-001 |  |
-| commit block to canonical chain immutably | blockchain::EV_BLOCK_COMMITTED_V0 exists but has zero consumers; CR seed §8 Business Invariants #4,6,7 require actual commit operation for committed blocks | CRITICAL | GAP-002 |  |
-| maintain chain state after genesis with supply conservation | blockchain::CC_FORM_BLOCK_V0 handles proposed blocks only; CR seed §7 Constraints #1 and Business Invariants #3 require post-genesis supply conservation enforcement | CRITICAL | GAP-003 |  |
-| record consensus round outcome including skip decisions | blockchain::CC_RECORD_CONSENSUS_ROUND_V0; blockchain::CC_SKIP_ROUND_V0 exists for skipping rounds during proposal workflow | SATISFIED |  |  |
-| append block lifecycle events to immutable journal | blockchain::CS_APPENDONLY_JSONL_V0 bound via blockchain::RB_PROPOSE_BLOCK_V0; blockchain::CC_FORM_BLOCK_V0 already appends proposed block events | SATISFIED |  |  |
-| write committed blocks to immutable BLOCKS store | blockchain::CS_MUTABLE_JSON_V0 available but needs commit-specific binding; blockchain::CC_FORM_BLOCK_V0 writes proposed blocks not commits | CRITICAL | GAP-004 |  |
+| Commit a proposed block to the canonical chain (immutable, authoritative) | S3 AUTHOR_NEW commit; S2 belief #1 | CRITICAL | GAP-1 | Author the commit operation; it emits the already-existing committed-block event. |
+| Bootstrap the chain from a genesis block and mint the initial supply | S3 AUTHOR_NEW genesis; S2 gap genesis | CRITICAL | GAP-2 | Author a one-time bootstrap workflow run before the consensus loop. |
+| Append committed blocks to the canonical chain store | S3 EXTEND storage | ADVISORY | GAP-3 | Extend the existing append-only block store with commit semantics; no new store. |
+| Record that a block has been committed | S3 REUSE event (blockchain::EV_BLOCK_COMMITTED_V0) | SATISFIED |  | Reuse the existing committed-block event; the commit operation emits it. |
+| Run the consensus loop that proposes blocks each round | S3 REUSE consensus (blockchain::RB_RUN_CONSENSUS_LOOP_V0) | SATISFIED |  | Reused unchanged; produces the proposed blocks the chain commits. |
+| Produce a proposed block for the round | S3 REUSE proposal (blockchain::CC_INVOKE_BLOCK_PROPOSAL_V0) | SATISFIED |  | Reused unchanged; the input to commit. |
+| Select the proposer from eligible validators | S3 REUSE proposer (blockchain::CC_QUERY_ELIGIBLE_VALIDATORS_V0) | SATISFIED |  | Reused unchanged. |
+| Mint the initial BachiCoin supply at genesis | S3 REUSE mint (blockchain::RB_MINT_V0) | SATISFIED |  | Reused by the genesis bootstrap to mint the fixed 1,000,000 supply. |
+| Create the MINT wallet for the Genesis Actor | S3 REUSE wallet (blockchain::RB_CREATE_WALLET_V0) | SATISFIED |  | Reused at genesis. |
+| Register the permanent Genesis Actor | S3 REUSE actor (blockchain::RB_REGISTER_ACTOR_UNVERIFIED_V0) | SATISFIED |  | Reused to establish the Genesis Actor. |
 
 ---
 
@@ -158,11 +162,10 @@ cite its FQDN in **Source Finding** only — never in the Capability Need cell.*
 <!-- register:dependency_graph -->
 | From | To | Dependency Type | PPS Status | Source Finding |
 |------|----|-----------------|------------|----------------|
-| chain subdomain genesis creation capability | blockchain::STRUCTURE_BLOCKCHAIN_STORAGE_V0 | storage structure reuse | SATISFIED | upstream handoff: dependency_discoveries storage EXISTING |
-| chain subdomain block commitment capability | blockchain::CS_APPENDONLY_JSONL_V0 | capability side effect reuse for event journaling | SATISFIED | upstream handoff: dependency_discoveries append-only REUSE via blockchain::RB_PROPOSE_BLOCK_V0 |
-| chain subdomain state maintenance capability | blockchain::CS_MUTABLE_JSON_V0 | capability side effect reuse for mutable store access | SATISFIED | upstream handoff: dependency_discoveries mutable JSON REUSE via blockchain::RB_PROPOSE_BLOCK_V0 |
-| chain subdomain block commitment capability | blockchain::EV_BLOCK_COMMITTED_V0 | event emission contract for committed blocks | SATISFIED | upstream handoff: dependency_discoveries event code EV_BLOCK_COMMITTED_V0 |
-| chain subdomain genesis creation capability | blockchain::AC_SYSTEM_V0 | actor authority for system-level bootstrap operations | SATISFIED | CR seed §1 CR Type; blockchain::AC_SYSTEM_V0 exists in PPS |
+| chain | consensus_pos | event | SATISFIED | blockchain::RB_RUN_CONSENSUS_LOOP_V0 produces proposed blocks |
+| chain | wallet | capability | SATISFIED | blockchain::RB_CREATE_WALLET_V0 reused for the MINT wallet |
+| chain | identity | capability | SATISFIED | blockchain::RB_REGISTER_ACTOR_UNVERIFIED_V0 reused for the Genesis Actor |
+| chain | orchestration | control | SATISFIED | consensus loop is driven by orchestration; commit invoked per round |
 
 ---
 
@@ -173,13 +176,12 @@ cite its FQDN in **Source Finding** only — never in the Capability Need cell.*
 <!-- register:constraint_register -->
 | # | Constraint | Source Finding | Source |
 |---|-----------|----------------|--------|
-| 1 | Closed monetary system — no supply enters or leaves except by the system's own rules | CR seed §7 Constraints #1; blockchain::CC_VALIDATE_MINT_POLICY_V0 for mint policy enforcement |  |
-| 2 | The chain is immutable — a committed block cannot be altered or removed | CR seed §7 Constraints #2; CR seed §8 Business Invariants #4 on immutability of committed blocks |  |
-| 3 | Genesis supply is fixed at 1 million BachiCoin minted to Genesis Actor at bootstrap | CR seed §7 Constraints #3; blockchain::AC_SYSTEM_V0 for system-level genesis operations |  |
-| 4 | Exactly one genesis block exists per chain and executes exactly once at bootstrap never replayed | CR seed §8 Business Invariants #1,2; blockchain::AC_SYSTEM_V0 for system-level single-execution semantics |  |
-| 5 | Total supply is conserved and equals 1 million BachiCoin with no minting or burning after genesis | CR seed §8 Business Invariants #3; blockchain::CC_VALIDATE_MINT_POLICY_V0 for post-genesis conservation |  |
-| 6 | A committed block has exactly one predecessor except the genesis block | CR seed §8 Business Invariants #5; blockchain::CC_FORM_BLOCK_V0 establishes single-predecessor linkage in proposed blocks |  |
-| 7 | A committed block cannot be committed twice to the canonical chain | CR seed §8 Business Invariants #6; blockchain::EV_BLOCK_COMMITTED_V0 for commit event uniqueness semantics |  |
+| 1 | Closed monetary system — no supply enters or leaves except by the system's own rules. | CR Seed Sec7.1 | Business policy |
+| 2 | The chain is immutable — a committed block cannot be altered or removed. | CR Seed Sec7.2 / Sec8.#4 | Business policy |
+| 3 | Genesis supply fixed at 1,000,000 BachiCoin, minted to the Genesis Actor at bootstrap. | CR Seed Sec7.3 / Sec4.#3 | Business policy |
+| 4 | Exactly one genesis block; genesis executes exactly once and is never replayed. | CR Seed Sec8.#1,#2 | Business invariant |
+| 5 | Every committed block has exactly one predecessor, except the genesis block. | CR Seed Sec8.#5 | Business invariant |
+| 6 | A block cannot be committed twice. | CR Seed Sec8.#6 | Business invariant |
 
 ---
 
@@ -190,10 +192,9 @@ cite its FQDN in **Source Finding** only — never in the Capability Need cell.*
 <!-- register:gap_register business_language -->
 | Gap Code | Source Finding | Capability | Owner Subdomain | Resolution |
 |----------|----------------|-----------|-----------------|------------|
-| GAP-001 | authoring_decisions: Genesis creation is distinct one-time operation separate from regular consensus operations; CR seed §8 Business Invariants #1,2 require genesis block capability | create genesis block at bootstrap and initialize canonical ledger state with fixed supply | chain | NEW |
-| GAP-002 | blockchain::EV_BLOCK_COMMITTED_V0 exists but has zero consumers; CR seed §8 Business Invariants #4,6 require actual commit operation for committed blocks to canonical chain | commit proposed block immutably to canonical chain history with cryptographic linkage enforcement | chain | NEW |
-| GAP-003 | blockchain::CC_FORM_BLOCK_V0 handles proposed blocks only; CR seed §7 Constraints #1 and Business Invariants #3 require post-genesis supply conservation enforcement capability | maintain chain state after genesis with closed monetary system constraints including supply conservation validation | chain | NEW |
-| GAP-004 | blockchain::CS_MUTABLE_JSON_V0 available but needs commit-specific binding; blockchain::CC_FORM_BLOCK_V0 writes proposed blocks not commits to canonical chain | write committed block records to immutable BLOCKS store with single-predecessor constraint enforcement | chain | NEW |
+| GAP-1 | S3 AUTHOR_NEW; S2 gap commit | Commit a proposed block to the canonical chain | chain | NEW |
+| GAP-2 | S3 AUTHOR_NEW; S2 gap genesis | Bootstrap the chain from genesis and mint the initial supply | chain | NEW |
+| GAP-3 | S3 EXTEND storage | Append committed blocks to the canonical chain store | chain | EXTEND |
 
 ---
 
@@ -204,12 +205,10 @@ cite its FQDN in **Source Finding** only — never in the Capability Need cell.*
 <!-- register:design_decisions -->
 | # | Decision | Source Finding | Rationale | Constraints Imposed |
 |---|----------|----------------|-----------|---------------------|
-| 1 | Genesis block creation is a distinct one-time operation separate from regular consensus operations | authoring_decisions: Genesis creates initial monetary state; blockchain::AC_SYSTEM_V0 for system-level bootstrap semantics | No existing artifact handles genesis creation. Genesis establishes canonical chain, immutability constraints, and fixed supply of 1 million BachiCoin at single execution point. | Requires dedicated capability with no replay; enforces exactly-one-execution invariant |
-| 2 | Block commitment to canonical chain requires new RB/CC pair in chain subdomain | blockchain::EV_BLOCK_COMMITTED_V0 (exists, zero consumers per topology_impact); blockchain::RB_PROPOSE_BLOCK_V0 handles proposal not commitment; CR seed §8 Business Invariants #4 require actual commit operation | Existing EV_BLOCK_COMMITTED_V0 has no supporting runtime binding or capability contract for actual commit. Need new RB/CC pair to implement immutably committing blocks. | Commit operation must enforce single-predecessor constraint and immutable write semantics |
-| 3 | Chain state maintenance after genesis requires dedicated capability for supply conservation | blockchain::CC_FORM_BLOCK_V0 (forms proposed blocks only); blockchain::RB_PROPOSE_BLOCK_V0 handles consensus_pos operations; CR seed §7 Constraints #1 and Business Invariants #3 require post-genesis closed monetary system enforcement | No existing artifacts manage committed block history or enforce post-genesis supply conservation. Need new capability to maintain canonical ledger with immutability constraints. | State maintenance must validate no minting/burning after genesis and preserve total supply invariant |
-| 4 | Reuse existing storage structure for chain subdomain stores | upstream handoff: dependency_discoveries blockchain::STRUCTURE_BLOCKCHAIN_STORAGE_V0 EXISTING; CR seed §1 placement_decision NEW_SUBDOMAIN with shared infrastructure reuse | Blockchain storage structure already provides BLOCKS, BLOCK_EVENTS and other chain subdomain stores. Reuse avoids duplication. | New capabilities must declare store paths resolved from STRUCTURE_BLOCKCHAIN_STORAGE_V0 |
-| 5 | Reuse existing append-only event journal capability for block lifecycle events | upstream handoff: dependency_discoveries CS_APPENDONLY_JSONL_V0 REUSE via blockchain::RB_PROPOSE_BLOCK_V0; CR seed §1 placement_decision with common infrastructure reuse | Append-only JSONL store already bound for consensus rounds and block events. Reuse provides immutable event logging without new artifacts. | Block commitment capability must append to BLOCK_EVENTS using existing CS_APPENDONLY_JSONL_V0 binding |
-| 6 | Reuse existing mutable JSON store access for chain state writes | upstream handoff: dependency_discoveries CS_MUTABLE_JSON_V0 REUSE via blockchain::RB_PROPOSE_BLOCK_V0; CR seed §1 placement_decision with common infrastructure reuse | Mutable JSON store already bound and available for chain state writes. Reuse provides write capability without new artifacts. | Genesis creation and block commitment capabilities must use CS_MUTABLE_JSON_V0 for BLOCKS store access |
+| 1 | The commit operation emits the existing committed-block event (blockchain::EV_BLOCK_COMMITTED_V0) rather than a new event. | S2 belief #1 evidence | The event already exists; only the operation is missing. | Commit must populate the existing event contract. |
+| 2 | Attest, Finalize, Fork resolution, Chain reorg, Slashing, and Rewards are deferred (out of scope). | S1 out_of_scope; S2 discovery_concerns | Incremental release; every proposed block is committed directly. | No finalization gate; no rejection path; commit every proposed block. |
+| 3 | Genesis bootstrap runs exactly once, before the consensus loop, and is never replayed. | S1 invariants Sec8.#1,#2 | Genesis establishes the chain and fixed supply. | Bootstrap is a one-time entry point; not part of the per-round loop. |
+| 4 | Reuse the existing append-only chain storage (EXTEND), not a new store. | S2 pps_baseline blockchain::STRUCTURE_BLOCKCHAIN_STORAGE_V0 | Storage exists but lacks commit semantics. | Commit writes through the existing storage structure. |
 
 ---
 
@@ -221,9 +220,9 @@ cite its FQDN in **Source Finding** only — never in the Capability Need cell.*
 ### In Scope — This CR
 | Capability | Gap Register Ref |
 |-----------|-----------------|
-| create genesis block at bootstrap | GAP-001 |
-| commit blocks to canonical chain immutably | GAP-002, GAP-004 |
-| maintain chain state with supply conservation after genesis | GAP-003 |
+| Commit a proposed block to the canonical chain | GAP-1 |
+| Bootstrap the chain from genesis and mint the initial supply | GAP-2 |
+| Append committed blocks to the canonical chain store | GAP-3 |
 
 ### Deferred — Future CR
 | Capability | Deferred Reason |
@@ -252,7 +251,7 @@ gov_projection schema exactly (`contracts/gov_projection.py`).*
 
 | Direction | Fields |
 |-----------|--------|
-| **Consumes** ← Stage 1 | cr_type · constraints · business_invariants · authority_boundaries |
+| **Consumes** ← Stage 1 | cr_type · constraints · business_invariants · authority_boundaries · out_of_scope |
 | **Consumes** ← Stage 2 | entities · entity_attributes · business_processes · pps_baseline_fqdns |
 | **Consumes** ← Stage 3 | authoring_decisions · dependency_discoveries · placement_decision · saturation |
 | **Emits** → Stage 5 | actors · bm_entities · events · capability_graph · dependency_graph · constraint_register · gap_register · design_decisions · authoring_scope |

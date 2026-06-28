@@ -48,6 +48,16 @@ EVIDENCE_COLUMNS = frozenset({"source_finding", "evidence", "fqdn", "reference",
 FQDN_COLUMNS = frozenset({"code", "rb_code", "binds_wf", "storage_structure"})
 FQDN_RE = re.compile(r"^[a-z][a-z0-9_.]*::(?:CC|CS|CT|IN|WF|RB|EV|AC|STRUCTURE|TI)_[A-Z0-9_]*_V\d+$")
 
+# Provenance-Ratchet Phase 1 — the legal home for uncertainty. A reserved cell sentinel: the
+# worker declares a *governed hole* (a required value it cannot source from SEED or GROUNDED
+# evidence) instead of fabricating it or leaving the cell blank. An UNRESOLVED cell is a typed,
+# owned hole — NOT a defect: it is exempt from the content/vocabulary/code-format checks for that
+# cell (a hole is not content, vocab, or a binding), but the ROW must still carry a Source Finding
+# explaining WHY it is a hole. The oracle COUNTS unresolved cells (a gap signal, surfaced and
+# scored like an unfilled prose section) WITHOUT marking the register dirty — a declared hole is a
+# gap awaiting clarification, not a coverage failure.
+UNRESOLVED = "UNRESOLVED"
+
 
 @dataclass
 class OracleResult:
@@ -56,6 +66,7 @@ class OracleResult:
     populated: list[str] = field(default_factory=list)
     empty_required: list[str] = field(default_factory=list)
     dirty: set[str] = field(default_factory=set)   # register_ids with ≥1 issue (for split coverage)
+    unresolved: list[str] = field(default_factory=list)  # "register[i].col" declared holes (Phase 1)
 
 
 class DossierStageRenderer:
@@ -91,6 +102,16 @@ class DossierStageRenderer:
                 flag(reg.register_id, f"required register '{reg.register_id}' is empty")
             ev_cols = [k for k in reg.keys if k in EVIDENCE_COLUMNS]
             for i, row in enumerate(rows):
+                # Phase 1 — declared holes: a cell whose value is exactly `UNRESOLVED` is a
+                # governed hole, not content. Record it (a gap signal, surfaced + scored upstream)
+                # and EXEMPT it from the vocabulary / code-format / business-language checks below
+                # — a hole is not a vocab token, a binding, or a leaked artifact name. It does NOT
+                # call flag() (no issue → register stays clean → governed_coverage unaffected). The
+                # row's traceability requirement still applies: a hole must be JUSTIFIED in Source
+                # Finding, not left lazy.
+                holes = {k for k in reg.keys if str(row.get(k, "")).strip() == UNRESOLVED}
+                for k in holes:
+                    res.unresolved.append(f"{reg.register_id}[{i}].{k}")
                 # traceability: a register with any evidence/source column must cite at least
                 # one of them per row (source_finding OR evidence OR fqdn) — not one specific
                 # column. Avoids redundant-column false flags when a register has e.g. both
@@ -101,6 +122,8 @@ class DossierStageRenderer:
                 # header as "Name (A | B | C)") may only contain a declared value. This is the
                 # contract the malformed free-text `decision` violated.
                 for k, allowed in reg.enums.items():
+                    if k in holes:
+                        continue
                     v = str(row.get(k, "")).strip()
                     if v and v not in allowed:
                         flag(reg.register_id,
@@ -108,7 +131,7 @@ class DossierStageRenderer:
                              f"vocabulary {list(allowed)}")
                 # FQDN well-formedness: a code column must hold a `domain::PREFIX_NAME_V<n>` FQDN.
                 for k in reg.keys:
-                    if k in FQDN_COLUMNS:
+                    if k in FQDN_COLUMNS and k not in holes:
                         v = str(row.get(k, "")).strip()
                         if v and not FQDN_RE.match(v):
                             flag(reg.register_id,
@@ -122,7 +145,7 @@ class DossierStageRenderer:
                         # legitimately carry FQDNs / controlled tokens (S4 column-type distinction).
                         if reg.bl_columns is not None and k not in reg.bl_columns:
                             continue
-                        if k in EVIDENCE_COLUMNS or k == reg.traceability_key or k in reg.enums:
+                        if k in EVIDENCE_COLUMNS or k == reg.traceability_key or k in reg.enums or k in holes:
                             continue
                         m = ARTIFACT_NAME_RE.search(str(v))
                         if m:
@@ -172,3 +195,26 @@ class DossierStageRenderer:
 
 def is_structured_template(template: str) -> bool:
     return has_registers(template)
+
+
+# A required human-authored prose section the worker never filled: the renderer copies the
+# template's `[...]` placeholder verbatim (e.g. S5 §1 Purpose — irreducible human knowledge a
+# compiler/agent cannot derive). A standalone bracketed block (it may wrap across lines) that
+# survives into the rendered document is an unfilled required section — a completeness gap, distinct
+# from a register defect. Domain-agnostic: it keys off the bracket, not the content.
+_PLACEHOLDER_RE = re.compile(r"^[ \t]*\[[^\]]+\][ \t]*$", re.M)
+_HEADING_RE = re.compile(r"^#{1,6}\s+(.*\S)\s*$", re.M)
+
+
+def unfilled_prose_placeholders(rendered_doc: str) -> list[str]:
+    """Required prose sections that shipped as unfilled `[...]` template placeholders.
+
+    Each gap is NAMED by its nearest preceding heading (so the console can say WHICH section is
+    open, not merely that some section is) followed by the placeholder prompt the human must answer.
+    """
+    gaps: list[str] = []
+    for m in _PLACEHOLDER_RE.finditer(rendered_doc):
+        headings = _HEADING_RE.findall(rendered_doc[: m.start()])
+        section = headings[-1].strip() if headings else "(document)"
+        gaps.append(f"§{section} — {' '.join(m.group(0).split())}")
+    return gaps
