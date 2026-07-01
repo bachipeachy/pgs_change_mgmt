@@ -180,8 +180,9 @@ DEFAULT_BELIEF_RESULTS = ("VERIFIED", "NOT_FOUND", "INSUFFICIENT_EVIDENCE")
 def rate_stage(sr: "StageResult") -> int:
     """Deterministic 0–5 figure-of-merit rating (5 best, 0 = abandoned).
 
-    −2 fabricated FQDN · −1 missing handoff field(s) · −1 didn't converge naturally
-    (forced/max_iters/stall) · −1 template coverage < 0.5. No document → 0 (abandon)."""
+    −2 fabricated FQDN · −1 missing handoff field(s) · −1 an iterative tool-loop failed to converge
+    (forced/max_iters/stall — N/A for a single-shot guided paste) · −1 template coverage < 0.5.
+    No document → 0 (abandon)."""
     if sr.doc_path is None:
         return 0
     score = 5
@@ -189,7 +190,13 @@ def rate_stage(sr: "StageResult") -> int:
         score -= 2
     if sr.missing:
         score -= 1
-    if "reason=finished " not in sr.telemetry:   # "finished_forced"/"max_iters"/"empty_stall"
+    # Convergence penalty — applies ONLY when convergence is a *defined, failed* outcome: an iterative
+    # tool-loop that ended forced/max_iters/stall (its telemetry carries `reason=`). A guided human
+    # paste has no tool-loop and no `reason=` — convergence is *undefined*, not *failed*, so it is not
+    # penalized on the quality star. That observability difference lives in the Worker Protocol Trace
+    # (`in-loop grounding: N/A — out-of-band`), not here. A clean artifact scores identically across
+    # transports; process-convergence never outranks artifact-correctness.
+    if "reason=" in sr.telemetry and "reason=finished " not in sr.telemetry:
         score -= 1
     # coverage penalty: structured stages set coverage to a binary oracle verdict (1.0 ok / 0.0
     # dirty), so 0.5 is the right gate. Free-form stages (S5/S6) use heading-fraction, which run-
@@ -441,6 +448,15 @@ class DossierEngine:
                     oracle.issues.append(msg)
                     oracle.dirty.add(rid)
                 oracle.ok = not oracle.issues
+            elif stage == "3":
+                # cross-STAGE belief preservation: S2's Validated Semantic Evidence must carry forward —
+                # every belief re-verified, none overturned without evidence, REUSE references an existing
+                # baseline, no belief-derived CRITICAL gap left undecided.
+                from ..evaluator.belief_preservation import check_belief_preservation
+                for rid, msg in check_belief_preservation(data, dict(task.input_projection.values)):
+                    oracle.issues.append(msg)
+                    oracle.dirty.add(rid)
+                oracle.ok = not oracle.issues
             elif stage == "7":
                 # cross-STAGE: every mandate code must trace to a Stage 6b register (no typo
                 # re-introduction), steps contiguous, counts reconcile with 6b.
@@ -459,6 +475,10 @@ class DossierEngine:
             oracle.ok = not oracle.issues
             doc = (renderer.render(data)
                    .replace("[domain]", cfg.domain).replace("[subdomain]", cfg.subdomain))
+            # Human-owned prose flows from its declared source (e.g. S5 §1 Purpose ← seed) — the
+            # value is supplied upstream and injected here, never authored by the worker.
+            from .authoring_completeness import fill_authoring_targets
+            doc = fill_authoring_targets(doc, cfg, stage)
             # handoff = the registers that are declared gov_projection emit-fields for this stage
             emit = {f.field for f in fields_emitted_by(stage)}
             proj = GovProjection(stage=stage, values={k: v for k, v in data.items() if k in emit})

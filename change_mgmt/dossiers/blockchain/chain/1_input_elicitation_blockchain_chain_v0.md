@@ -20,6 +20,20 @@ boundaries) are human-authoritative and let Stage 2 discover topology in service
 
 ---
 
+## Subdomain Purpose (foundational business context — human, non-derivable)
+
+*The one irreducible business narrative no compiled artifact can derive: what this subdomain
+governs and why it exists. Stated once here, at the source; consumed downstream (e.g. S5 §1),
+never rediscovered.*
+
+The Chain subdomain maintains the official blockchain ledger. It records every block that has been
+accepted by the network and preserves the complete history of the blockchain from the beginning.
+Other subdomains decide which blocks should be accepted, but the Chain subdomain is responsible for
+maintaining the authoritative record once that decision has been made. This authoritative ledger is
+the foundation that the rest of the blockchain system relies on.
+
+---
+
 ## 1. CR Type
 
 **NEW_SUBDOMAIN** — `blockchain/chain`.

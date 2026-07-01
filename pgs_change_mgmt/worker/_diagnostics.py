@@ -30,6 +30,7 @@ class Termination(str, Enum):
     EMPTY_STALL = "EMPTY_STALL"                  # repeated empty/garbled turns
     TRANSPORT_ERROR = "TRANSPORT_ERROR"          # the model/API transport failed
     FORCED_FINALIZATION = "FORCED_FINALIZATION"  # budget forced a tool-free final turn
+    HUMAN_BOUNDARY = "HUMAN_BOUNDARY"            # guided transport: a human/Claude-Code paste, no loop
 
 
 def canonical_termination(loop_reason: str, tool_calls_total: int) -> Termination:
@@ -110,12 +111,32 @@ class WorkerProtocolTrace:
         return self.native_tool_calls == 0 and any(f.get("textual_tool_hint") for f in self._responses)
 
     @property
+    def transport(self) -> str:
+        return (self.request or {}).get("transport", "tool_loop")
+
+    @property
+    def is_interactive(self) -> bool:
+        """Guided transport — a human/Claude-Code paste, not an observable in-loop tool cycle."""
+        return self.transport == "interactive"
+
+    @property
     def termination(self) -> Termination:
+        if self.is_interactive:
+            return Termination.HUMAN_BOUNDARY
         return canonical_termination(self.termination_reason or "finished", self.termination_tool_calls)
 
     # ---- ownership verdict (assign the failure to exactly one layer) --------------------------
     def ownership(self) -> tuple[str, str]:
         """(case, explanation) — the single layer that owns the outcome. Never a repair, only a verdict."""
+        if self.is_interactive:
+            # The observability boundary IS the human mutation boundary: grounding happened in the
+            # chat session (Claude Code has pi in-session) and is not visible in a PGS tool-loop.
+            # The honest verdict is not a model/worker failure — it is that observation stops here,
+            # where the InteractiveIngressValidator gates the pasted response (schema + grounding_spec).
+            return ("OK — HUMAN BOUNDARY (out-of-band grounding)",
+                    "guided transport: the worker is a human/Claude-Code paste; in-session grounding "
+                    "is not observable in a PGS tool-loop. Observation stops at the mutation boundary, "
+                    "where the InteractiveIngressValidator gates the response (schema + grounding_spec).")
         if self.native_tool_calls > 0 and self.parsed_tool_calls == 0:
             return ("A — WORKER (parser)",
                     "model emitted tool calls but the worker parsed none — parser/transport drops them")
@@ -145,6 +166,22 @@ class WorkerProtocolTrace:
         r = self.request or {}
         tools = r.get("tools") or []
         case, why = self.ownership()
+        if self.is_interactive:
+            # Honest interactive view: no in-loop tool cycle to report. Show that grounding tools
+            # were AVAILABLE to the human, that in-loop grounding is not observable, and that the
+            # boundary gate is the InteractiveIngressValidator.
+            return "\n".join([
+                f"Worker Protocol Trace — stage {r.get('stage', '?')} · worker=interactive · "
+                f"model={r.get('model', '?')} · transport=interactive",
+                f"  Request — response={r.get('prompt_chars', '?')} chars (human-pasted)",
+                f"  Grounding tools available:  {_mark(bool(tools), f'({len(tools)}: ' + ', '.join(tools) + ')')} "
+                f"— available in-session (e.g. Claude Code `pi`)",
+                "  In-loop grounding observed: N/A (out-of-band at the human mutation boundary)",
+                "  Boundary gate:              InteractiveIngressValidator (schema + grounding_spec, strict)",
+                f"  Exited:                     {self.termination.value}",
+                f"  OWNERSHIP:                  Case {case}",
+                f"                              {why}",
+            ])
         emitted = (_mark(self.native_tool_calls > 0, f"({self.native_tool_calls})")
                    if self.native_tool_calls else
                    ("✗ (textual hint only)" if self.textual_hint_without_native else "✗"))

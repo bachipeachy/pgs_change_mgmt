@@ -164,12 +164,11 @@ def main() -> int:
             assert s.structured and not s.oracle_issues, \
                 f"clean S{stage} registers should be clean: {s.oracle_issues}"
             if stage == "5":
-                # S5 still has one irreducible human-authored prose section (§1 Purpose) the
-                # structured path cannot fill (§4 Identity is now the identity_semantics register).
-                # The completeness check correctly flags Purpose as a gap, so a register-clean S5
-                # is still not-ok and loses one star.
-                assert s.incomplete_sections and not s.ok and s.rating == 4, \
-                    f"S5 must flag the unfilled Purpose prose section: {s.incomplete_sections}"
+                # §1 Purpose is now supplied upstream in the seed (Authoring Completeness) and
+                # injected at render — it is no longer an S5 authoring hole. A register-clean S5
+                # with the seed's Purpose present is fully clean and rates 5.
+                assert s.ok and s.rating == 5 and not s.incomplete_sections, \
+                    f"S5 §1 Purpose should fill from the seed (no prose gap): {s.incomplete_sections}"
                 assert not s.unresolved_cells, "clean S5 has no declared holes"
             else:
                 assert s.ok and s.rating == 5, f"clean S{stage} should rate 5"
@@ -197,8 +196,8 @@ def main() -> int:
         assert not s.inadmissible, "a declared hole is admissible (visible hole, non-halting)"
         assert not s.ok, "a stage with a declared hole is not-ok (awaits clarification)"
         assert s.governed_coverage in (None, 1.0), "a hole must not dirty governed coverage"
-        # Purpose prose gap (-1) + declared hole (-1) → 3/5
-        assert s.rating == 3, f"S5 with a hole should rate 3 (prose gap + hole): got {s.rating}"
+        # §1 Purpose now fills from the seed; only the declared UNRESOLVED hole costs a star → 4/5
+        assert s.rating == 4, f"S5 with a declared hole should rate 4 (§1 fills from seed): got {s.rating}"
         md = (Path(tmp) / "chain" / "5_business_intent_blockchain_chain_v0.md").read_text()
         assert "| UNRESOLVED |" in md, "the UNRESOLVED hole must render in the document"
         assert (Path(tmp) / "chain" / "_handoff" / "5.json").exists(), \

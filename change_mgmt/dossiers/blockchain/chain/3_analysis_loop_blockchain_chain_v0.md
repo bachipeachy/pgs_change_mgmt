@@ -86,10 +86,8 @@ Each analysis finding carries an `evidence_status` and a `confidence`:
 <!-- register:analysis_findings -->
 | Question Id | Finding | Impact | Evidence Status (OBSERVED, INFERRED, OPEN) | Confidence (HIGH, MEDIUM, LOW) | Resolution Status (CLOSED, OPEN) | Evidence |
 |-------------|---------|--------|-----------------|------------|-------------------|----------|
-| AF-1 | No chain-commit operation exists; only the committed-block EVENT exists. | The commit operation must be authored; it can emit the existing event. | OBSERVED | HIGH | CLOSED | vocab_search:COMMIT_BLOCK,APPEND_BLOCK -> 0; blockchain::EV_BLOCK_COMMITTED_V0 exists |
-| AF-2 | No genesis / bootstrap artifact exists in the snapshot. | A one-time genesis bootstrap workflow must be authored. | OBSERVED | HIGH | CLOSED | vocab_search:GENESIS,BOOTSTRAP -> 0 |
-| AF-3 | Chain storage provides append-only block storage but lacks commit semantics. | Extend its usage via the new commit capability rather than author a new store. | OBSERVED | HIGH | CLOSED | blockchain::STRUCTURE_BLOCKCHAIN_STORAGE_V0 PARTIAL fit |
-| AF-4 | The consensus loop already produces the proposed blocks the chain will commit. | Commit consumes proposed blocks; reuse the loop unchanged. | OBSERVED | HIGH | CLOSED | blockchain::RB_RUN_CONSENSUS_LOOP_V0 (S2 Belief #2) |
+| S2-Q1 | the committed-block event exists but no capability produces it; the new chain commit capability should emit it rather than author a duplicate | avoids a duplicate event and keeps a single committed signal | OBSERVED | HIGH | CLOSED | blockchain::EV_BLOCK_COMMITTED_V0 |
+| S2-Q2 | a mint capability already exists; genesis bootstrap should invoke it once at startup rather than author a second minting path | keeps a single minting rule and the closed-supply invariant | OBSERVED | HIGH | CLOSED | blockchain::WF_MINT_V0 |
 
 ---
 
@@ -100,10 +98,15 @@ Each analysis finding carries an `evidence_status` and a `confidence`:
 <!-- register:verification_results -->
 | Item | Origin | Result (CONFIRMED, OVERTURNED) | Evidence |
 |------|--------|--------|----------|
-| No chain commit capability (S1 belief #1) | S2 belief_verification #1 | CONFIRMED | re-grounded: vocab_search:COMMIT_BLOCK -> 0 |
-| Consensus loop exists (S1 belief #2) | S2 belief_verification #2 | CONFIRMED | blockchain::RB_RUN_CONSENSUS_LOOP_V0 |
-| Block proposal exists (S1 belief #3) | S2 belief_verification #3 | CONFIRMED | blockchain::CC_INVOKE_BLOCK_PROPOSAL_V0 |
-| Committed-block event already exists | S2 belief #1 evidence | CONFIRMED | blockchain::EV_BLOCK_COMMITTED_V0 grounded |
+| no capability commits a proposed block to a ledger | S2 belief 1 | CONFIRMED | blockchain::EV_BLOCK_COMMITTED_V0 is an orphan event; no commit capability exists |
+| a consensus loop proposes blocks and drives slot processing | S2 belief 2 | CONFIRMED | blockchain::WF_PROCESS_SLOT_V0 |
+| a block-proposal capability produces a proposed block | S2 belief 3 | CONFIRMED | blockchain::WF_PROPOSE_BLOCK_V0, blockchain::CC_FORM_BLOCK_V0 |
+| a validator registry records validators for proposer selection | S2 belief 4 | CONFIRMED | blockchain::WF_REGISTER_VALIDATOR_V0, blockchain::CC_QUERY_ELIGIBLE_VALIDATORS_V0 |
+| a wallet capability records balances and keys | S2 belief 5 | CONFIRMED | blockchain::WF_CREATE_WALLET_V0 |
+| a transaction capability exists in the pipeline | S2 belief 6 | CONFIRMED | blockchain::WF_SUBMIT_TRANSACTION_V0 |
+| a mempool queues transactions before block formation | S2 belief 7 | CONFIRMED | blockchain::CC_CLAIM_MEMPOOL_TXS_V0 |
+| an orchestration subdomain drives slot processing | S2 belief 8 | CONFIRMED | blockchain::WF_PROCESS_SLOT_V0 |
+| adjacent subdomains identity, wallet, transaction, mempool, consensus and orchestration exist | S2 belief 9 | CONFIRMED | blockchain::WF_CREATE_WALLET_V0, blockchain::WF_SUBMIT_TRANSACTION_V0 |
 
 ---
 
@@ -114,16 +117,11 @@ Each analysis finding carries an `evidence_status` and a `confidence`:
 <!-- register:dependency_discoveries -->
 | Dependency | Type | Disposition (EXISTING, REUSE, AUTHOR_NEW, INVESTIGATE) | Evidence |
 |------------|------|-------------|----------|
-| Chain commit capability | capability_contract | AUTHOR_NEW | vocab_search:COMMIT_BLOCK -> 0 |
-| Genesis bootstrap workflow | workflow | AUTHOR_NEW | vocab_search:GENESIS -> 0 |
-| Committed-block event | event | EXISTING | blockchain::EV_BLOCK_COMMITTED_V0 |
-| Canonical chain store | storage | EXISTING | blockchain::STRUCTURE_BLOCKCHAIN_STORAGE_V0 (extend usage) |
-| Consensus loop runtime binding | runtime_binding | EXISTING | blockchain::RB_RUN_CONSENSUS_LOOP_V0 |
-| Block proposal invocation | capability_contract | EXISTING | blockchain::CC_INVOKE_BLOCK_PROPOSAL_V0 |
-| Proposer selection | capability_contract | EXISTING | blockchain::CC_QUERY_ELIGIBLE_VALIDATORS_V0; CC_SELECT_PROPOSER_V0 |
-| Mint capability | runtime_binding | REUSE | blockchain::RB_MINT_V0; CC_VALIDATE_MINT_POLICY_V0 |
-| Wallet creation | runtime_binding | REUSE | blockchain::RB_CREATE_WALLET_V0 |
-| Genesis Actor registration | runtime_binding | REUSE | blockchain::RB_REGISTER_ACTOR_UNVERIFIED_V0 |
+| the proposed block the chain commits | record consumed from the consensus loop | EXISTING | blockchain::WF_PROPOSE_BLOCK_V0 |
+| the transactions carried in a block | records drained from the mempool | EXISTING | blockchain::CC_CLAIM_MEMPOOL_TXS_V0 |
+| the minting rule used at genesis | policy the genesis bootstrap invokes | REUSE | blockchain::WF_MINT_V0 |
+| the committed-block signal | event the commit capability emits | REUSE | blockchain::EV_BLOCK_COMMITTED_V0 |
+| the canonical ledger store for committed blocks | storage the chain owns | AUTHOR_NEW | S2 gap: no ledger node in the neighbourhood |
 
 ---
 
@@ -134,9 +132,9 @@ Each analysis finding carries an `evidence_status` and a `confidence`:
 <!-- register:impact_analysis -->
 | Artifact | Impact Scope | Consumer Count | Evidence |
 |----------|--------------|----------------|----------|
-| new chain-commit capability | invoked by the consensus loop after block proposal each round | 1 | blockchain::RB_RUN_CONSENSUS_LOOP_V0 (S2 Belief #2) |
-| new genesis bootstrap workflow | run once at initialization, before the consensus loop; creates genesis + mints supply | 0 (bootstrap entry point) | CR Seed Sec4.#2 |
-| reused committed-block event | emitted by the new commit capability; existing consumers unchanged | existing | blockchain::EV_BLOCK_COMMITTED_V0 |
+| the committed-block signal | reused by the new commit capability; no other consumer today | 0 | blockchain::EV_BLOCK_COMMITTED_V0 |
+| the mint policy | invoked once by genesis bootstrap; existing mint path unchanged | 1 | blockchain::WF_MINT_V0 |
+| the block-proposal workflow | unchanged upstream producer; the chain consumes its output | 1 | blockchain::WF_PROPOSE_BLOCK_V0 |
 
 ---
 
@@ -158,16 +156,12 @@ Each analysis finding carries an `evidence_status` and a `confidence`:
 <!-- register:authoring_decisions business_language=capability -->
 | Capability | Decision (REUSE, EXTEND, AUTHOR_NEW) | Rationale | Alternatives Checked | Source Finding |
 |------------|----------|-----------|----------------------|----------------|
-| Commit a proposed block to the canonical chain (make it immutable and authoritative) | AUTHOR_NEW | No commit operation exists (vocab_search COMMIT_BLOCK/APPEND_BLOCK -> 0). The committed-block event already exists, so only the operation is authored; it emits that existing event. | blockchain::EV_BLOCK_COMMITTED_V0 exists (event only) | S2 belief #1 VERIFIED; S2 gap (commit) CRITICAL |
-| Bootstrap the chain from a genesis block and mint the initial supply | AUTHOR_NEW | No genesis/bootstrap artifact exists (vocab_search GENESIS/BOOTSTRAP -> 0). Author a one-time workflow that creates the genesis block and mints to the Genesis Actor. | vocab_search:GENESIS,BOOTSTRAP -> 0 | S2 gap (genesis) CRITICAL; CR Seed Sec4.#2 |
-| Append committed blocks to the canonical chain store | EXTEND | Append-only block storage exists but lacks commit semantics (PARTIAL); extend its usage with the new commit capability rather than author a new store. | blockchain::STRUCTURE_BLOCKCHAIN_STORAGE_V0 - PARTIAL | S2 pps_baseline STRUCTURE_BLOCKCHAIN_STORAGE_V0 |
-| Record that a block has been committed (event) | REUSE | The committed-block event already exists; the new commit operation emits it. No new event needed. | blockchain::EV_BLOCK_COMMITTED_V0 - EXACT (event exists) | S2 belief #1 evidence |
-| Run the consensus loop that proposes blocks each round | REUSE | Existing consensus loop satisfies slot processing and produces the proposed blocks the chain commits. | blockchain::RB_RUN_CONSENSUS_LOOP_V0 - EXACT | S2 belief #2 VERIFIED |
-| Produce a proposed block for the round | REUSE | Existing block-proposal capability produces the proposed block (the input to commit). | blockchain::CC_INVOKE_BLOCK_PROPOSAL_V0 - EXACT | S2 belief #3 VERIFIED |
-| Select the proposer for a round from eligible validators | REUSE | Existing eligibility query and proposer selection already choose the proposer. | blockchain::CC_QUERY_ELIGIBLE_VALIDATORS_V0 - EXACT | S2 belief #4 VERIFIED |
-| Mint the initial BachiCoin supply at genesis | REUSE | Existing mint capability/policy is reused by the genesis bootstrap to mint the fixed 1,000,000 supply. | blockchain::RB_MINT_V0; CC_VALIDATE_MINT_POLICY_V0 - PARTIAL (genesis context) | S2 pps_baseline mint; CR Seed Sec4.#3 |
-| Create the MINT wallet held by the Genesis Actor | REUSE | Existing wallet-creation runtime binding is reused at genesis for the Genesis Actor's MINT wallet. | blockchain::RB_CREATE_WALLET_V0 - PARTIAL (genesis context) | S2 pps_baseline wallet; CR Seed Sec4.#4 |
-| Register the permanent Genesis Actor | REUSE | Existing actor-registration runtime binding is reused to establish the Genesis Actor. | blockchain::RB_REGISTER_ACTOR_UNVERIFIED_V0 - PARTIAL | S2 entities Genesis Actor; CR Seed Sec4.#4 |
+| commit a proposed block to the canonical chain | AUTHOR_NEW | no capability commits a proposed block to a ledger; this is the core gap | searched the neighbourhood for a commit/append-block capability — none exists | S2 gap: no commit capability; blockchain::EV_BLOCK_COMMITTED_V0 orphan |
+| bootstrap genesis and mint the initial supply once | AUTHOR_NEW | no one-time genesis bootstrap sequence exists | the mint policy exists but is not sequenced as a one-time bootstrap | S2 gap: GENESIS and BOOTSTRAP absent |
+| the canonical ledger store for committed blocks | AUTHOR_NEW | committed history has no authoritative store | no ledger store node in the neighbourhood | S2 gap: no ledger node |
+| form a proposed block from mempool transactions | REUSE | the block-proposal capability already forms blocks; the chain consumes its output | authoring a new former would duplicate consensus work | blockchain::CC_FORM_BLOCK_V0 |
+| mint supply under policy | REUSE | genesis bootstrap invokes the existing mint policy once | a second minting path would break the single-supply invariant | blockchain::WF_MINT_V0 |
+| signal that a block was committed | REUSE | the committed-block event exists; the new commit capability emits it | authoring a duplicate event would fork the committed signal | blockchain::EV_BLOCK_COMMITTED_V0 |
 
 ---
 
@@ -178,7 +172,7 @@ Each analysis finding carries an `evidence_status` and a `confidence`:
 <!-- register:placement_decision business_language=subdomain -->
 | Decision (NEW_SUBDOMAIN, EXTEND) | Subdomain | Rationale | Source Finding |
 |----------|-----------|-----------|----------------|
-| NEW_SUBDOMAIN | blockchain::chain | The canonical ledger (chain) is a distinct concern from block proposal and needs its own governance boundary; it is not an extension of an existing subdomain. | CR Seed Sec1; S2 placement |
+| NEW_SUBDOMAIN | chain | the canonical ledger is a distinct concern from block proposal and owns committed history; it is not an extension of an existing subdomain | S1 CR type NEW_SUBDOMAIN; S2 confirmed no existing ledger owner |
 
 ---
 
@@ -189,10 +183,9 @@ Each analysis finding carries an `evidence_status` and a `confidence`:
 <!-- register:saturation business_language=criterion -->
 | Criterion | Status (SATISFIED, NOT_SATISFIED) | Evidence |
 |-----------|--------|----------|
-| All CRITICAL gaps dispositioned | SATISFIED | commit + genesis assigned AUTHOR_NEW; no CRITICAL gap left open |
-| No open analyst questions | SATISFIED | all analysis_findings resolution_status CLOSED |
-| Every required capability has a REUSE/EXTEND/AUTHOR_NEW decision | SATISFIED | 10 authoring decisions cover commit, genesis, storage, event, consensus, proposal, proposer, mint, wallet, actor |
-| Deferred items excluded from authoring | SATISFIED | fork/slashing/rewards/attest noted as deferred (S2 discovery_concerns); no authoring decision made for them |
+| no unresolved CRITICAL gap remains | SATISFIED | all three CRITICAL S2 gaps have an AUTHOR_NEW decision |
+| no open analyst question remains | SATISFIED | both S2 open questions resolved as CLOSED analysis findings |
+| the dependency graph did not expand in the last pass | SATISFIED | all dependencies resolve to EXISTING/REUSE except the owned AUTHOR_NEW artifacts |
 
 *Required criteria: (1) no unresolved CRITICAL gaps; (2) no open analyst questions; (3) no dependency expansion in the last pass; (4) verification pass complete, no OVERTURNED item unresolved; (5) every INFERRED finding promoted to OBSERVED, explicitly accepted, or carried forward with a reason.*
 

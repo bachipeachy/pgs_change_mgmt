@@ -9,7 +9,7 @@ The boundary object that crosses this seam is `gov_projection.GovProjection`.
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Any, Mapping, Protocol, runtime_checkable
 
 from .gov_projection import GovProjection
@@ -37,6 +37,11 @@ class StageOutput:
     registers: Mapping[str, Any]
     questions: tuple[str, ...] = ()
     findings: tuple[str, ...] = ()
+    # Provenance metadata — the worker's own attestation of HOW this output was produced. Empty for
+    # the in-loop API/local workers (their provenance is the Worker Protocol Trace). The interactive
+    # (Guided) worker stamps the Human Mutation Boundary here (Pipeline Trifecta plan §4a P5):
+    # {origin, mutation_boundary, validated_by, prompt_hash, model_label}. Audit/CSI consume it.
+    provenance: Mapping[str, Any] = field(default_factory=dict)
 
     def to_projection(self) -> GovProjection:
         return GovProjection(stage=self.stage, values=dict(self.registers))

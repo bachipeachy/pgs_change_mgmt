@@ -47,6 +47,27 @@ code mechanically.
   (the oracle collision-checks via grounding). Existing artifacts go in `existing_inventory`.
 - **Reconciled:** the NEW counts in `artifact_summary` MUST equal the rows of `new_artifacts`.
 
+### Capability Composition discipline (the oracle enforces these)
+
+`cc_composition` declares the second half of Design Intent: WHAT each new CC is composed of. Workflow
+topology (§5) says how CCs route to one another; composition says what is *inside* each CC. It is
+**declarative, not procedural** — you declare the governed capabilities the CC is built from and how
+data flows between them; you never write code, JSON, JSONPath, or an implementation.
+
+- **CT/CS only.** Each composition step is a Capability Transform (`CT`, pure compute, zero side
+  effects) or a Capability Side Effect (`CS`, the only place external state changes) — never a CC, WF,
+  or IN. A CC composes *capabilities*, not other CCs.
+- **Codes verbatim.** Every `Capability` cell is a CT/CS binding FQDN copied verbatim from
+  `new_artifacts` (NEW) or a grounded `existing_inventory` artifact (REUSE) — same immutability rule
+  as every binding FQDN. A composition code absent from both registers is a defect.
+- **Data flow is logical, not wired.** `Consumes` / `Produces` name business/data fields (e.g.
+  `proposed_block`, `content_hash`), connecting a CC's inputs to its steps and step-to-step. Concrete
+  JSONPath wiring is construction (S8), not design.
+- **Outcome coverage.** The outcomes the composition can yield MUST cover the CC's routing surface in
+  `execution_topology` (§5): if topology routes the CC on `SUCCESS` and `ALREADY_EXISTS`, the
+  composition must be able to produce both. The oracle cross-checks composition ⊇ topology surface.
+- **CT purity.** A `CT` step may not appear where a side effect is required, and may never be a CS.
+
 ### Business-Language Rule
 
 Only the `capability` column of `new_artifacts` is business language (name the need, not the
@@ -71,6 +92,7 @@ binding codes belong. Existing artifacts are cited by their real FQDN in `fqdn` 
 - **Workflow nodes are IN, CC, EXIT/EXIT_SUCCESS only.** Sub-workflow invocation = gateway CC bound to `CS_WORKFLOW_GATEWAY_V0` (precedent: `CC_INVOKE_BLOCK_PROPOSAL_V0`). EV_ artifacts are emitted facts, never triggers.
 - A store is written only by CCs of its owning subdomain. Writing CCs for peer stores are declared in the dependency-gap section with peer ownership.
 - Before declaring a new CT or EV: check the existing inventory (the transform vocabulary and event set usually already contain the atom) — if reused, it belongs in `existing_inventory`, not `new_artifacts`.
+- **Compose every new CC.** Each `family = CC` row in `new_artifacts` gets a `cc_composition` (§6): the ordered CT/CS steps it is built from + their data flow. Leaving a CC's composition unstated leaves construction a design decision — exactly the black box this stage exists to close.
 - **Module path assignment (reference):** IN→`[repo].registry.chain.intents`, WF→`.workflows`, CC→`.capability_contracts`, CT→`.capability_transforms`, RB→`.runtime_bindings`, STRUCTURE→`.structures`. A missing assignment is a build failure.
 
 ---
@@ -82,8 +104,8 @@ binding codes belong. Existing artifacts are cited by their real FQDN in `fqdn` 
 <!-- register:design_resolution optional -->
 | Decision | Business Fact | Resolution | Source Finding |
 |----------|---------------|------------|----------------|
-| Commit emits the existing committed-block event | EV_BLOCK_COMMITTED_V0 already exists | REUSE the event; author only the commit operation | S4 design_decision #1 |
-| Genesis runs once before the loop | genesis executes exactly once (S1 invariant) | bootstrap workflow is a one-time entry point | S4 design_decision #3 |
+| commit emits the existing committed-block event | blockchain::EV_BLOCK_COMMITTED_V0 already exists | REUSE the event; author only the commit operation | S4 design_decision #1 |
+| genesis runs once before the loop | genesis executes exactly once (S1 invariant) | bootstrap workflow is a one-time entry point | S4 design_decision #3 |
 
 ---
 
@@ -135,8 +157,8 @@ binding codes belong. Existing artifacts are cited by their real FQDN in `fqdn` 
 <!-- register:rb_declarations -->
 | RB Code | Binds WF | CS Bindings | Storage Structure | Source Finding |
 |---------|----------|-------------|-------------------|----------------|
-| blockchain::RB_COMMIT_BLOCK_V0 | blockchain::WF_COMMIT_BLOCK_V0 | capability_side_effects::CS_APPENDONLY_JSONL_V0, capability_side_effects::CS_MUTABLE_JSON_V0 | blockchain::STRUCTURE_BLOCKCHAIN_STORAGE_V0 | S6 storage_governance; CS_MUTABLE_JSON_V0 added — CC_COMMIT writes chain_head (Build Sheet GAP_DOSSIER) |
-| blockchain::RB_BOOTSTRAP_GENESIS_CHAIN_V0 | blockchain::WF_BOOTSTRAP_GENESIS_CHAIN_V0 | capability_side_effects::CS_APPENDONLY_JSONL_V0, capability_side_effects::CS_MUTABLE_JSON_V0 | blockchain::STRUCTURE_BLOCKCHAIN_STORAGE_V0 | S6 storage_governance; CS_MUTABLE_JSON_V0 added — genesis writes chain_head (Build Sheet GAP_DOSSIER) |
+| blockchain::RB_COMMIT_BLOCK_V0 | blockchain::WF_COMMIT_BLOCK_V0 | capability_side_effects::CS_APPENDONLY_JSONL_V0, capability_side_effects::CS_MUTABLE_JSON_V0 | blockchain::STRUCTURE_BLOCKCHAIN_STORAGE_V0 | S6 storage_governance; CS_MUTABLE_JSON_V0 — CC_COMMIT writes chain_head |
+| blockchain::RB_BOOTSTRAP_GENESIS_CHAIN_V0 | blockchain::WF_BOOTSTRAP_GENESIS_CHAIN_V0 | capability_side_effects::CS_APPENDONLY_JSONL_V0, capability_side_effects::CS_MUTABLE_JSON_V0 | blockchain::STRUCTURE_BLOCKCHAIN_STORAGE_V0 | S6 storage_governance; genesis writes chain_head |
 
 ---
 
@@ -160,9 +182,10 @@ binding codes belong. Existing artifacts are cited by their real FQDN in `fqdn` 
 ## 6. Capability Composition
 
 *The inside of each new CC: the ordered CT/CS steps it is composed of and how data flows between
-them. Declarative, not procedural. `capability` is a CT/CS binding FQDN (verbatim from
-`new_artifacts` or grounded existing); `consumes`/`produces` name logical data fields. The outcomes
-the composition can yield must cover the CC's routing surface in §5.*
+them. Declarative, not procedural — governed capabilities + data flow, never code or JSONPath. One
+row per (CC, step), in execution order. `capability` is a CT/CS binding FQDN (verbatim from
+`new_artifacts` or `existing_inventory`); `consumes`/`produces` name logical data fields. The
+outcomes the composition can yield must cover the CC's routing surface in `execution_topology` (§5).*
 
 <!-- register:cc_composition optional -->
 | CC Code | Step | Capability | Kind (CT, CS) | Operation | Consumes | Produces |
@@ -176,21 +199,6 @@ the composition can yield must cover the CC's routing surface in §5.*
 | blockchain::CC_VALIDATE_PREDECESSOR_LINK_V0 | 1 | capability_side_effects::CS_MUTABLE_JSON_V0 | CS | GET | — | current_head |
 | blockchain::CC_VALIDATE_PREDECESSOR_LINK_V0 | 2 | capability_transforms::CT_PURE_COMPARE_EQUAL_V0 | CT | COMPUTE | proposed_block.predecessor_hash, current_head | is_match |
 
-*CC_VALIDATE routing surface (from §5): `is_match=true ⇒ SUCCESS`, `is_match=false ⇒ VIOLATION`. The
-equality rule lives in the CC (which two values); `CT_PURE_COMPARE_EQUAL_V0` is a generic primitive.*
-
-**Gaps — disposition (Gate decision 2026-06-25):**
-
-- ✅ RESOLVED — **CC_VALIDATE_PREDECESSOR_LINK_V0** comparison: declared the generic shared primitive
-  `capability_transforms::CT_PURE_COMPARE_EQUAL_V0` (new_artifacts) and composed it as step 2. The
-  blockchain rule (predecessor==head) stays in the CC; the CT stays reusable. (Was `GAP_DOSSIER`.)
-- ⏸ DEFERRED → future CR — **genesis mint chain** (`GAP_ARCHITECTURAL_DRIFT`, not merely a decision:
-  S5 governs minting 1,000,000 to the Genesis Actor as in-scope, but S6b failed to preserve it — the
-  two stages describe different systems). Per Gate decision this CR delivers **commit + genesis
-  block-record** only; wiring the reused mint/wallet/actor workflows (gateway CCs bound to
-  `CS_WORKFLOW_GATEWAY_V0`) is an explicit, recorded scope deferral to a follow-up CR. Genesis
-  composition therefore stops at the block record (steps 1–3, no mint).
-
 ---
 
 ## 7. STRUCTURE Stores
@@ -200,8 +208,8 @@ equality rule lives in the CC (which two values); `CT_PURE_COMPARE_EQUAL_V0` is 
 <!-- register:structure_stores optional -->
 | Store Name | Storage Type (CS_APPENDONLY_JSONL_V0, CS_MUTABLE_JSON_V0) | Proposed Path | Used By | Source Finding |
 |------------|-----------------------------------------------------------|---------------|---------|----------------|
-| canonical_blocks | CS_APPENDONLY_JSONL_V0 | blockchain/chain/blocks.jsonl | blockchain::CC_COMMIT_BLOCK_CANONICAL_V0, blockchain::CC_CREATE_GENESIS_BLOCK_V0 | S6 storage; genesis writer added (Build Sheet GAP_DOSSIER) |
-| chain_head | CS_MUTABLE_JSON_V0 | blockchain/chain/head.json | blockchain::CC_COMMIT_BLOCK_CANONICAL_V0, blockchain::CC_CREATE_GENESIS_BLOCK_V0 | S6 storage; genesis writer added (Build Sheet GAP_DOSSIER) |
+| canonical_blocks | CS_APPENDONLY_JSONL_V0 | blockchain/chain/blocks.jsonl | blockchain::CC_COMMIT_BLOCK_CANONICAL_V0, blockchain::CC_CREATE_GENESIS_BLOCK_V0 | S6 storage; genesis writer added |
+| chain_head | CS_MUTABLE_JSON_V0 | blockchain/chain/head.json | blockchain::CC_COMMIT_BLOCK_CANONICAL_V0, blockchain::CC_CREATE_GENESIS_BLOCK_V0 | S6 storage; genesis writer added |
 
 ---
 
@@ -248,7 +256,8 @@ Mandate. Gate 2 (after Stage 7) locks the full dossier before artifact authoring
 *The bounded inputs and emit keys mirror the engine's gov_projection schema exactly
 (`contracts/gov_projection.py`). 6b is the binding stage — it consumes the full design context
 (S2 attribute/step data, S4 gaps/decisions, S5 intent + provisional codes, S6 placement) and emits
-the five registers S7 builds from. Emit keys match the register ids above exactly.*
+the five registers S7 builds from, plus `cc_composition` which the S8 Build Sheet assembles. Emit
+keys match the register ids above exactly.*
 
 | Direction | Fields |
 |-----------|--------|
@@ -257,3 +266,4 @@ the five registers S7 builds from. Emit keys match the register ids above exactl
 | **Consumes** ← Stage 5 | scope_boundary · invariants · actions · provisional_codes |
 | **Consumes** ← Stage 6 | ownership · storage_governance · cross_subdomain_deps · pps_artifacts_requiring_action |
 | **Emits** → Stage 7 | new_artifacts · existing_inventory · rb_declarations · execution_topology · artifact_summary |
+| **Emits** → Stage 8 (Build Sheet) | cc_composition |

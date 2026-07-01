@@ -1,0 +1,16 @@
+{
+  "_doc": "Declared registry of human-owned authoring fields — the source of truth for the Authoring Completeness invariant. A field here is information the platform CANNOT derive (owner:human, derivable:false); the checker enumerates this registry at t0 and refuses to run the pipeline until every required field is supplied. Adding a human-owned field tomorrow is a declaration here, not a code change. Boundary 2 (Authority vs Authorship): the compiler derives what is derivable, the human provides what is not, the worker transforms between them.",
+  "fields": {
+    "subdomain_purpose": {
+      "owner": "human",
+      "derivable": false,
+      "phase": "seed",
+      "type": "narrative",
+      "required_before": "1",
+      "why": "the scope of authority everything downstream hangs from; no compiled artifact can derive why the subdomain exists",
+      "prompt": "One short paragraph for a business stakeholder: what this subdomain governs, what authority it establishes, what lifecycle it manages, and why it exists. No artifact names.",
+      "source": { "kind": "seed", "section": "Subdomain Purpose" },
+      "renderer_target": { "stage": "5", "placeholder": "[Purpose paragraph for {domain}/{subdomain}.]" }
+    }
+  }
+}

@@ -74,12 +74,13 @@ A required register with no rows renders as `| NONE IDENTIFIED |`.
 <!-- register:ownership business_language=capability -->
 | Capability | Owner Subdomain | Disposition (OWNED, SATISFIED, DEFERRED) | Existing Artifact | Source Finding |
 |------------|-----------------|------------------------------------------|-------------------|----------------|
-| Commit a proposed block to the canonical chain | chain | OWNED |  | S4 GAP-1 |
-| Bootstrap the chain from genesis and mint initial supply | chain | OWNED |  | S4 GAP-2 |
-| Append committed blocks to the canonical store | chain | OWNED | blockchain::STRUCTURE_BLOCKCHAIN_STORAGE_V0 | S4 GAP-3 |
-| Produce a proposed block | consensus | SATISFIED | blockchain::CC_INVOKE_BLOCK_PROPOSAL_V0 | S3 REUSE |
-| Mint the initial supply | blockchain | SATISFIED | blockchain::RB_MINT_V0 | S3 REUSE |
-| Attestation, finalization, slashing, rewards | chain | DEFERRED |  | S1 out_of_scope |
+| commit a proposed block to the canonical chain | chain | OWNED |  | S5-scope-commit |
+| bootstrap genesis and mint the initial supply once | chain | OWNED |  | S5-scope-genesis |
+| the canonical ledger store for committed blocks | chain | OWNED |  | S5-scope-ledger |
+| form a proposed block from mempool transactions | consensus_pos | SATISFIED | the existing block-proposal capability | blockchain::CC_FORM_BLOCK_V0 |
+| mint supply under policy | wallet | SATISFIED | the existing mint policy | blockchain::WF_MINT_V0 |
+| signal that a block was committed | consensus_pos | SATISFIED | the existing committed-block event | blockchain::EV_BLOCK_COMMITTED_V0 |
+| attestation and finalization of committed blocks | chain | DEFERRED |  | S5-scope-attest-deferred |
 
 ---
 
@@ -90,8 +91,8 @@ A required register with no rows renders as `| NONE IDENTIFIED |`.
 <!-- register:storage_governance business_language=storage_need,purpose -->
 | Storage Need | Purpose | Subdomain | Source Finding |
 |--------------|---------|-----------|----------------|
-| canonical block records | immutable, ordered history of committed blocks | chain | S1 invariant immutability |
-| chain head pointer | track the latest committed block height | chain | S4 entity Chain |
+| canonical chain ledger — the append-only record of committed blocks | the authoritative store of committed history the chain owns | chain | S5-identity-ledger |
+| genesis block record | anchors the chain at height zero and records the initial mint | chain | S5-scope-genesis |
 
 ---
 
@@ -102,9 +103,10 @@ A required register with no rows renders as `| NONE IDENTIFIED |`.
 <!-- register:cross_subdomain_deps optional business_language=dependency -->
 | Dependency | Direction | Existing Artifact | Status (SATISFIED, GAP) | Source Finding |
 |------------|-----------|-------------------|-------------------------|----------------|
-| proposed blocks from the consensus loop | inbound | blockchain::RB_RUN_CONSENSUS_LOOP_V0 | SATISFIED | S2 belief #2 |
-| mint capability for genesis supply | outbound | blockchain::RB_MINT_V0 | SATISFIED | S3 REUSE |
-| wallet and actor registration for the Genesis Actor | outbound | blockchain::RB_CREATE_WALLET_V0 | SATISFIED | S3 REUSE |
+| the proposed block the chain commits | chain → consensus_pos | the existing block-proposal workflow | SATISFIED | blockchain::WF_PROPOSE_BLOCK_V0 |
+| the transactions carried in a committed block | chain → mempool | the existing mempool claim capability | SATISFIED | blockchain::CC_CLAIM_MEMPOOL_TXS_V0 |
+| the mint policy invoked at genesis | chain → wallet | the existing mint policy | SATISFIED | blockchain::WF_MINT_V0 |
+| the committed-block signal the commit capability emits | chain → consensus_pos | the existing committed-block event | SATISFIED | blockchain::EV_BLOCK_COMMITTED_V0 |
 
 ---
 
@@ -115,8 +117,9 @@ A required register with no rows renders as `| NONE IDENTIFIED |`.
 <!-- register:pps_artifacts_requiring_action optional -->
 | FQDN | Current Status | Action (REPLACE, REVIEW, REUSE) | Source Finding |
 |------|----------------|----------------------------------|----------------|
-| blockchain::STRUCTURE_BLOCKCHAIN_STORAGE_V0 | append-only block storage without commit semantics | REVIEW | S3 EXTEND storage |
-| blockchain::EV_BLOCK_COMMITTED_V0 | committed-block event exists but is not emitted by any operation | REUSE | S3 REUSE event |
+| blockchain::EV_BLOCK_COMMITTED_V0 | orphan event — declared with no producer | REUSE | the new commit capability emits it, giving it its producer |
+| blockchain::WF_MINT_V0 | existing mint policy | REUSE | genesis bootstrap invokes it once |
+| blockchain::CC_FORM_BLOCK_V0 | existing block-proposal capability | REUSE | the chain consumes its output |
 
 ---
 
@@ -127,7 +130,10 @@ A required register with no rows renders as `| NONE IDENTIFIED |`.
 <!-- register:boundary_rules optional -->
 | Rule Name | Statement | Source Finding |
 |-----------|-----------|----------------|
-| NONE IDENTIFIED |  |  |
+| Chain owns committed history | the chain is the sole authority for committed blocks and committed history; no other subdomain writes the ledger | S1-authority-committed-history |
+| Consensus owns proposal | block proposal and consensus remain in consensus_pos; the chain never proposes, only commits | S1-authority-proposed-block |
+| Single minting path | supply is minted only via the existing mint policy, exactly once at genesis; the chain authors no second minting path | S5-invariant-closed-supply |
+| Single committed signal | the committed-block event is emitted once per committed block, by the commit capability; no duplicate event is authored | S5-invariant-single-signal |
 
 ---
 
@@ -138,7 +144,9 @@ A required register with no rows renders as `| NONE IDENTIFIED |`.
 <!-- register:governance_outcome optional business_language=capability -->
 | Capability | Owner Subdomain | Source Finding |
 |------------|-----------------|----------------|
-| NONE IDENTIFIED |  |  |
+| commit a proposed block to the canonical chain | chain | S5-scope-commit |
+| bootstrap genesis and mint the initial supply once | chain | S5-scope-genesis |
+| the canonical ledger store for committed blocks | chain | S5-scope-ledger |
 
 ---
 

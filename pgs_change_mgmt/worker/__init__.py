@@ -12,15 +12,20 @@ same telemetry — only the model and transport differ).
 the model directly (e.g. the construction builder).
 """
 
-from .ollama_worker import OllamaWorker, PINNED_NUM_CTX, SYSTEM_PROMPT
+from ._authoring import SYSTEM_PROMPT, render_task, parse_output
+from .ollama_worker import OllamaWorker, PINNED_NUM_CTX
 from .ollama_client import OllamaClient, OllamaError
 from .claude import ClaudeWorker, ClaudeError, DEFAULT_MODEL as CLAUDE_DEFAULT_MODEL
 from .gemini import GeminiWorker, GeminiError, DEFAULT_MODEL as GEMINI_DEFAULT_MODEL
+from .interactive import InteractiveWorker
+from .interactive_ingress import InteractiveIngressValidator, IngressVerdict
 
 __all__ = [
     "OllamaWorker",
     "PINNED_NUM_CTX",
     "SYSTEM_PROMPT",
+    "render_task",
+    "parse_output",
     "OllamaClient",
     "OllamaError",
     "ClaudeWorker",
@@ -29,4 +34,7 @@ __all__ = [
     "GeminiWorker",
     "GeminiError",
     "GEMINI_DEFAULT_MODEL",
+    "InteractiveWorker",
+    "InteractiveIngressValidator",
+    "IngressVerdict",
 ]

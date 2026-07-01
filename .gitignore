@@ -91,3 +91,8 @@ engine_runs/
 # reviewable locally, regenerated each run); not source. Matches any subdomain's dossier.
 _handoff/
 
+# Guided Authoring Mode Stage Packages — exported prompt bundles + human-pasted responses
+# (run state, reviewable locally, regenerated from the seed each run); not source. Matches any
+# subdomain's dossier. To commit one as governance evidence: git add -f <dossier>/_packages/...
+_packages/
+

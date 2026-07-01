@@ -90,20 +90,20 @@ found in a content cell.
 ### Actors (actors)
 | Actor | Role | Authority Class | Source Finding |
 |-------|------|-----------------|----------------|
-| Genesis Actor | Receives the initial minted supply at bootstrap and owns the MINT wallet thereafter. | SYSTEM | S1 vocab; S2 entity Genesis Actor |
-| Proposer | Validator selected per round to produce a proposed block that the chain then commits. | SYSTEM | S2 entity Proposer |
+| Proposer | forms and proposes the next block from mempool transactions | SYSTEM | S2-E-proposer |
+| Validator | participates in the consensus round that closes a slot | SYSTEM | S2-belief-4 |
+| Genesis Actor | the one-time bootstrap authority that seeds the ledger and initial supply | SYSTEM | S2-E-genesis |
+| Chain | owns the canonical ledger and commits proposed blocks to it | SYSTEM | S3-place-1 |
 
 <!-- register:bm_entities business_language -->
 ### Entities (bm_entities)
 | Entity | Description | Store Model | Source Finding |
 |--------|-------------|-------------|----------------|
-| Chain | The authoritative append-only ledger of committed blocks that serves as canonical history. | append-only ledger of committed blocks; lifecycle Uninitialized -> Active | S2 entity: Chain |
-| Block | A unit of the ledger produced by a proposer, carrying the transactions of its round. | immutable once committed (append-only canonical record); transient while proposed | S2 entity: Block |
-| Proposed Block | A block produced in the consensus loop that is not yet committed and not authoritative. | transient pre-commit candidate (Proposed lifecycle state) | S2 entity: Proposed Block |
-| Genesis Block | The chain's first block, containing the initial mint to the Genesis Actor; created once at bootstrap. | first committed block of the canonical ledger (Created Once) | S2 entity: Genesis Block |
-| Genesis Actor | The permanent actor receiving the initial minted supply and owning the MINT wallet thereafter. | actor record with permanent minting authority at genesis | S2 entity: Genesis Actor |
-| BachiCoin | The system's unit of value; a closed monetary supply conserved at 1,000,000 total. | balance tracked in wallet records | S2 entity: BachiCoin |
-| Proposer | The validator selected to produce a block in a given round. | validator record selected per round by eligibility | S2 entity: Proposer |
+| Canonical Chain | the immutable append-only ledger of committed blocks — the source of truth this subdomain owns | append-only ledger store | S3-dep-5 |
+| Committed Block | a proposed block once committed to the canonical chain; permanent and ordered | append-only record in the ledger | S3-C1 |
+| Proposed Block | a block formed by the proposer from mempool transactions, awaiting commit — produced upstream, consumed here | consumed record (not owned) | S2-E-proposed-block |
+| Genesis Block | the first block, written once at bootstrap to anchor the chain | append-only record in the ledger | S2-E-genesis-block |
+| BachiCoin | the fixed initial supply minted once at genesis under the existing mint policy | reused mint policy (not owned) | S2-E-bachicoin |
 
 <!-- register:resources optional business_language -->
 ### Resources
@@ -115,9 +115,8 @@ found in a content cell.
 ### Events (events)
 | Event | Trigger | Lifecycle Meaning | Source Finding |
 |-------|---------|-------------------|----------------|
-| Genesis Created | Once, at bootstrap, before the consensus loop runs. | Establishes the chain and the initial monetary state. | S1 business_events |
-| Block Proposed | A proposer produces a block in a round. | A candidate block exists; not yet authoritative. | S1 business_events |
-| Block Committed | A proposed block is committed to the canonical chain. | The block and its transactions become authoritative and immutable. | S1 business_events |
+| Block Committed | the chain commits a proposed block to the canonical ledger | the ledger advances by one permanent block | S3-reuse-committed-event |
+| Genesis Created | the one-time bootstrap writes the genesis block and mints the initial supply | the chain is anchored and the closed supply established | S2-E-genesis |
 
 *A relationship implies a capability. Name that capability as a **business need** in Capability
 Need (business language — no artifact names). If an existing or candidate artifact is relevant,
@@ -127,7 +126,9 @@ cite its FQDN in **Source Finding** only — never in the Capability Need cell.*
 ### Relationships (Candidate Capabilities)
 | Subject | Verb | Object | Capability Need | Source Finding |
 |---------|------|--------|-----------------|----------------|
-| NONE IDENTIFIED |  |  |  |  |
+| Chain | commits | Proposed Block | commit a proposed block to the canonical chain | S3-C1 |
+| Genesis Actor | bootstraps | Canonical Chain | bootstrap genesis and mint the initial supply once | S3-C2 |
+| Chain | reuses | mint policy | mint supply under policy | S3-reuse-mint |
 
 ---
 
@@ -142,16 +143,12 @@ cite its FQDN in **Source Finding** only — never in the Capability Need cell.*
 <!-- register:capability_graph business_language -->
 | Capability | Source Finding | Status | Gap Register Entry | Notes |
 |-----------|----------------|--------|--------------------|-------|
-| Commit a proposed block to the canonical chain (immutable, authoritative) | S3 AUTHOR_NEW commit; S2 belief #1 | CRITICAL | GAP-1 | Author the commit operation; it emits the already-existing committed-block event. |
-| Bootstrap the chain from a genesis block and mint the initial supply | S3 AUTHOR_NEW genesis; S2 gap genesis | CRITICAL | GAP-2 | Author a one-time bootstrap workflow run before the consensus loop. |
-| Append committed blocks to the canonical chain store | S3 EXTEND storage | ADVISORY | GAP-3 | Extend the existing append-only block store with commit semantics; no new store. |
-| Record that a block has been committed | S3 REUSE event (blockchain::EV_BLOCK_COMMITTED_V0) | SATISFIED |  | Reuse the existing committed-block event; the commit operation emits it. |
-| Run the consensus loop that proposes blocks each round | S3 REUSE consensus (blockchain::RB_RUN_CONSENSUS_LOOP_V0) | SATISFIED |  | Reused unchanged; produces the proposed blocks the chain commits. |
-| Produce a proposed block for the round | S3 REUSE proposal (blockchain::CC_INVOKE_BLOCK_PROPOSAL_V0) | SATISFIED |  | Reused unchanged; the input to commit. |
-| Select the proposer from eligible validators | S3 REUSE proposer (blockchain::CC_QUERY_ELIGIBLE_VALIDATORS_V0) | SATISFIED |  | Reused unchanged. |
-| Mint the initial BachiCoin supply at genesis | S3 REUSE mint (blockchain::RB_MINT_V0) | SATISFIED |  | Reused by the genesis bootstrap to mint the fixed 1,000,000 supply. |
-| Create the MINT wallet for the Genesis Actor | S3 REUSE wallet (blockchain::RB_CREATE_WALLET_V0) | SATISFIED |  | Reused at genesis. |
-| Register the permanent Genesis Actor | S3 REUSE actor (blockchain::RB_REGISTER_ACTOR_UNVERIFIED_V0) | SATISFIED |  | Reused to establish the Genesis Actor. |
+| commit a proposed block to the canonical chain | S3-C1 | CRITICAL | GAP-1 | the core gap — no capability commits a proposed block to a ledger today |
+| bootstrap genesis and mint the initial supply once | S3-C2 | CRITICAL | GAP-2 | one-time startup sequence; invokes the existing mint policy |
+| the canonical ledger store for committed blocks | S3-C3 | CRITICAL | GAP-3 | committed history has no authoritative store today |
+| form a proposed block from mempool transactions | blockchain::CC_FORM_BLOCK_V0 | REUSE |  | block-proposal already forms blocks; the chain consumes its output |
+| mint supply under policy | blockchain::WF_MINT_V0 | REUSE |  | genesis bootstrap invokes the existing mint policy once |
+| signal that a block was committed | blockchain::EV_BLOCK_COMMITTED_V0 | REUSE |  | the committed-block event exists; the new commit capability emits it |
 
 ---
 
@@ -162,10 +159,10 @@ cite its FQDN in **Source Finding** only — never in the Capability Need cell.*
 <!-- register:dependency_graph -->
 | From | To | Dependency Type | PPS Status | Source Finding |
 |------|----|-----------------|------------|----------------|
-| chain | consensus_pos | event | SATISFIED | blockchain::RB_RUN_CONSENSUS_LOOP_V0 produces proposed blocks |
-| chain | wallet | capability | SATISFIED | blockchain::RB_CREATE_WALLET_V0 reused for the MINT wallet |
-| chain | identity | capability | SATISFIED | blockchain::RB_REGISTER_ACTOR_UNVERIFIED_V0 reused for the Genesis Actor |
-| chain | orchestration | control | SATISFIED | consensus loop is driven by orchestration; commit invoked per round |
+| chain | consensus_pos | consumes proposed block | SATISFIED | blockchain::WF_PROPOSE_BLOCK_V0 |
+| chain | mempool | consumes transactions carried in a block | SATISFIED | blockchain::CC_CLAIM_MEMPOOL_TXS_V0 |
+| chain | wallet | invokes mint policy at genesis | SATISFIED | blockchain::WF_MINT_V0 |
+| chain | consensus_pos | emits committed-block signal | SATISFIED | blockchain::EV_BLOCK_COMMITTED_V0 |
 
 ---
 
@@ -176,12 +173,9 @@ cite its FQDN in **Source Finding** only — never in the Capability Need cell.*
 <!-- register:constraint_register -->
 | # | Constraint | Source Finding | Source |
 |---|-----------|----------------|--------|
-| 1 | Closed monetary system — no supply enters or leaves except by the system's own rules. | CR Seed Sec7.1 | Business policy |
-| 2 | The chain is immutable — a committed block cannot be altered or removed. | CR Seed Sec7.2 / Sec8.#4 | Business policy |
-| 3 | Genesis supply fixed at 1,000,000 BachiCoin, minted to the Genesis Actor at bootstrap. | CR Seed Sec7.3 / Sec4.#3 | Business policy |
-| 4 | Exactly one genesis block; genesis executes exactly once and is never replayed. | CR Seed Sec8.#1,#2 | Business invariant |
-| 5 | Every committed block has exactly one predecessor, except the genesis block. | CR Seed Sec8.#5 | Business invariant |
-| 6 | A block cannot be committed twice. | CR Seed Sec8.#6 | Business invariant |
+| 1 | the canonical chain is immutable and append-only — committed blocks are never rewritten | S1-K-immutable | governance rule |
+| 2 | the monetary supply is closed — total supply is fixed and minted only once at genesis | S1-K-closed-supply | governance rule |
+| 3 | a single committed-block signal — the commit capability emits the existing event, never a duplicate | S3-reuse-committed-event | analysis decision |
 
 ---
 
@@ -192,9 +186,9 @@ cite its FQDN in **Source Finding** only — never in the Capability Need cell.*
 <!-- register:gap_register business_language -->
 | Gap Code | Source Finding | Capability | Owner Subdomain | Resolution |
 |----------|----------------|-----------|-----------------|------------|
-| GAP-1 | S3 AUTHOR_NEW; S2 gap commit | Commit a proposed block to the canonical chain | chain | NEW |
-| GAP-2 | S3 AUTHOR_NEW; S2 gap genesis | Bootstrap the chain from genesis and mint the initial supply | chain | NEW |
-| GAP-3 | S3 EXTEND storage | Append committed blocks to the canonical chain store | chain | EXTEND |
+| GAP-1 | S3-C1 | commit a proposed block to the canonical chain | chain | NEW |
+| GAP-2 | S3-C2 | bootstrap genesis and mint the initial supply once | chain | NEW |
+| GAP-3 | S3-C3 | the canonical ledger store for committed blocks | chain | NEW |
 
 ---
 
@@ -205,10 +199,9 @@ cite its FQDN in **Source Finding** only — never in the Capability Need cell.*
 <!-- register:design_decisions -->
 | # | Decision | Source Finding | Rationale | Constraints Imposed |
 |---|----------|----------------|-----------|---------------------|
-| 1 | The commit operation emits the existing committed-block event (blockchain::EV_BLOCK_COMMITTED_V0) rather than a new event. | S2 belief #1 evidence | The event already exists; only the operation is missing. | Commit must populate the existing event contract. |
-| 2 | Attest, Finalize, Fork resolution, Chain reorg, Slashing, and Rewards are deferred (out of scope). | S1 out_of_scope; S2 discovery_concerns | Incremental release; every proposed block is committed directly. | No finalization gate; no rejection path; commit every proposed block. |
-| 3 | Genesis bootstrap runs exactly once, before the consensus loop, and is never replayed. | S1 invariants Sec8.#1,#2 | Genesis establishes the chain and fixed supply. | Bootstrap is a one-time entry point; not part of the per-round loop. |
-| 4 | Reuse the existing append-only chain storage (EXTEND), not a new store. | S2 pps_baseline blockchain::STRUCTURE_BLOCKCHAIN_STORAGE_V0 | Storage exists but lacks commit semantics. | Commit writes through the existing storage structure. |
+| 1 | the chain is a new subdomain that owns committed history | S3-place-1 | the canonical ledger is a distinct concern from block proposal and is not an extension of an existing subdomain | chain owns the ledger store; proposal stays upstream in consensus |
+| 2 | reuse block-proposal, the mint policy and the committed-block event rather than author duplicates | S3-reuse-form-block | these capabilities exist and are verified; duplicating them would fork consensus, break the single-supply invariant, or split the committed signal | chain consumes upstream outputs; single minting path; single committed event |
+| 3 | attestation and finalization are out of scope; every committed block is treated as good | S1-out-of-scope | the CR scope excludes a finalization gate for this increment | no finalization or slashing capability is modeled |
 
 ---
 
@@ -220,9 +213,9 @@ cite its FQDN in **Source Finding** only — never in the Capability Need cell.*
 ### In Scope — This CR
 | Capability | Gap Register Ref |
 |-----------|-----------------|
-| Commit a proposed block to the canonical chain | GAP-1 |
-| Bootstrap the chain from genesis and mint the initial supply | GAP-2 |
-| Append committed blocks to the canonical chain store | GAP-3 |
+| commit a proposed block to the canonical chain | GAP-1 |
+| bootstrap genesis and mint the initial supply once | GAP-2 |
+| the canonical ledger store for committed blocks | GAP-3 |
 
 ### Deferred — Future CR
 | Capability | Deferred Reason |

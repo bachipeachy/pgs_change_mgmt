@@ -65,7 +65,7 @@ work. `code` is copied verbatim from a Stage 6b register; `depends_on` lists pre
 | 1 | 4 | blockchain::EV_GENESIS_CREATED_V0 | NEW | chain | - |
 | 2 | 5 | blockchain::CC_VALIDATE_PREDECESSOR_LINK_V0 | NEW | chain | CT_PURE_COMPARE_EQUAL_V0 |
 | 2 | 6 | blockchain::CC_COMMIT_BLOCK_CANONICAL_V0 | NEW | chain | CT_PURE_HASH_BLOCK_V0 |
-| 2 | 7 | blockchain::CC_CREATE_GENESIS_BLOCK_V0 | NEW | chain | - |
+| 2 | 7 | blockchain::CC_CREATE_GENESIS_BLOCK_V0 | NEW | chain | CT_PURE_HASH_BLOCK_V0 |
 | 3 | 8 | blockchain::IN_COMMIT_BLOCK_V0 | NEW | chain | - |
 | 3 | 9 | blockchain::IN_BOOTSTRAP_GENESIS_CHAIN_V0 | NEW | chain | - |
 | 4 | 10 | blockchain::WF_COMMIT_BLOCK_V0 | NEW | chain | IN_COMMIT_BLOCK_V0 |
@@ -131,7 +131,7 @@ critical path.*
 <!-- register:cross_subdomain_notes optional -->
 | Code | Note |
 |------|------|
-| NONE IDENTIFIED |  |
+| capability_transforms::CT_PURE_COMPARE_EQUAL_V0 | a shared generic comparison primitive authored in capability_transforms, not chain; the blockchain predecessor==head rule stays in CC_VALIDATE_PREDECESSOR_LINK_V0 |
 
 ---
 

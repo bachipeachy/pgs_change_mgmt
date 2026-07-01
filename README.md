@@ -147,6 +147,48 @@ default. Each stage prints a live R/Y/G grounding stream and a per-stage figure 
 
 ---
 
+## Three Execution Modes — the Authoring Trifecta
+
+The command above is the **Automated** mode. All three modes share one worker interface, one
+validation path, one figure of merit — only the *transport* between a stage's governed prompt and
+the actor changes. Authority never moves: the oracle, the schema, and the gates are identical.
+
+| Mode | Transport | Worker | Cost | When |
+|------|-----------|--------|------|------|
+| **Automated** | in-loop tool calls | `OllamaWorker` / `ClaudeWorker` / `GeminiWorker` | API/compute | CI, batch, A/B |
+| **Guided Authoring** | human paste (chat UI / a coding assistant with `pi`) | `InteractiveWorker` | zero API | long-form quality, human-in-loop |
+| **Offline replay** | recorded `response.md` | `InteractiveWorker` | zero | deterministic regression |
+
+**Guided Authoring Mode** exports a governed **Stage Package**, you author the response through any
+conversational model, and PGS ingress-validates and imports it — identical downstream to Automated:
+
+```bash
+# 1. EXPORT — write the governed Stage Package for a stage (stamps the live snapshot hash)
+PGS_WORKSPACE=/abs python -m pgs_change_mgmt.engine.run_interactive --seed blockchain_chain --stage 1 --export
+#    → open stage_1/system_prompt.md + user_prompt.md in a chat LLM; ground each token in
+#      stage_1/context/grounding_spec.json via `pi vocab search <TOKEN>`; paste the reply into
+#      stage_1/response.md  (a 0-result is a FINAL answer — the artifact does not exist)
+
+# 2. IMPORT — ingress-validate at the human mutation boundary, then run the engine for that stage
+PGS_WORKSPACE=/abs python -m pgs_change_mgmt.engine.run_interactive --seed blockchain_chain --stage 1 --import \
+    --model-label claude-code --diagnose
+```
+
+The **Stage Package** is a machine contract, not prose: its hashed `prompt_bundle.json` (a serialized
+`PromptIR`) is the source of truth; the `.md` files are rendered views. The **InteractiveIngressValidator**
+runs *before* the engine sees your paste — it rejects an undeclared register, a malformed row, an
+ungrounded assertion, or an FQDN smuggled into a business-language column, so the human cannot become
+an untyped compiler bypass. The accepted response carries **Human Mutation Boundary** provenance
+(origin, prompt hash, model label) and, under `--diagnose`, an honest Worker Protocol Trace: grounding
+happened in your session and is out-of-band, so the trace terminates at the boundary rather than
+faking an in-loop failure.
+
+> **The protocol is the system of record; automation is an optimization on top of it, not a
+> prerequisite.** A human expert, a local model, a frontier API, or a coding assistant is just
+> another worker conforming to the same governed contract.
+
+---
+
 ## After Stage 7 — author, compile, test, close
 
 The dossier pipeline stops at Stage 7 because Stage 7 is the last thing derivable from the dossier

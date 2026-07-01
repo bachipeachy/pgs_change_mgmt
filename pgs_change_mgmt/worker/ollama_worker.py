@@ -29,25 +29,13 @@ from ..contracts import GroundingProvider
 from ..grounding import TOOL_SCHEMAS
 from .ollama_client import OllamaClient, OllamaError
 from ._loop import ToolCall, Turn, TransportError, run_tool_loop
+# Shared, transport-agnostic authoring primitives (one of each, never a per-transport fork).
+# SYSTEM_PROMPT is re-exported here for back-compat (worker/__init__ and callers import it from
+# this module); the canonical definition lives in `_authoring`.
+from ._authoring import SYSTEM_PROMPT, render_task, parse_output
 
 # The context window is a correctness property of authoring, not a tuning knob — pin it.
 PINNED_NUM_CTX = 65536
-
-SYSTEM_PROMPT = """You are a change-management authoring worker for a Protocol-Governed System (PGS).
-
-ABSOLUTE RULE — you have NO protocol knowledge of your own. Every protocol fact (artifact
-FQDNs, who references what, workflow routing, change impact, artifact content, snapshot
-validity) MUST come from a tool call. Never state a protocol fact from memory; if you have
-not retrieved it via a tool, you do not know it. Never guess an FQDN — discover it with
-vocab_search first (search a single UPPERCASE code token like 'WALLET', not a phrase).
-
-You are given one stage's objective, the upstream handoff you may read, and the governance
-rules in force. Do the stage's work, then emit your result as a SINGLE fenced ```json object
-with these keys:
-  "registers": { <field>: <value>, ... }   the stage's structured outputs (copy FQDNs verbatim)
-  "questions": [ <string>, ... ]            open questions for a later stage (may be empty)
-Output your reasoning as plain text BEFORE the json block. Emit no machine artifact syntax —
-a downstream renderer owns that. Do not claim a change is valid; call validate and report it."""
 
 
 class OllamaTransport:
@@ -131,7 +119,7 @@ class OllamaWorker:
     # ---- the bounded stage task ------------------------------------------
 
     def execute_stage(self, task: StageInput) -> StageOutput:
-        task_text = self._render_task(task)
+        task_text = render_task(task)
         transport = OllamaTransport(self.llm, self.system_prompt, task_text)
         tool_names = tuple(t.get("function", {}).get("name", "") for t in TOOL_SCHEMAS)
         # Layer 1 — Request: the contract PGS handed this worker (Worker Observability Protocol).
@@ -139,7 +127,7 @@ class OllamaWorker:
                    prompt_chars=len(task_text), num_ctx=self.llm.num_ctx, tools=list(tool_names))
         final_text, telem = run_tool_loop(
             transport, self.grounding, max_iters=self.max_iters, emit=self._emit, tool_names=tool_names)
-        registers, questions, findings = self._parse_output(final_text)
+        registers, questions, findings = parse_output("automated", final_text)
         # Always surface loop telemetry as the first finding, so a failed/empty authoring
         # is diagnosable (did the model finish, exhaust max_iters, or stall on empty turns?).
         telem_line = (f"[tool-loop: iters={telem['iters']}/{self.max_iters} "
@@ -152,59 +140,5 @@ class OllamaWorker:
             findings=(telem_line, *findings),
         )
 
-    # ---- task framing ----------------------------------------------------
-
-    @staticmethod
-    def _render_task(task: StageInput) -> str:
-        bounded = json.dumps(dict(task.input_projection.values), indent=2, default=str)
-        rules = "\n".join(f"- {r}" for r in task.governance_rules) or "- (none)"
-        return (
-            f"# STAGE {task.stage}\n\n"
-            f"## Objective\n{task.objective}\n\n"
-            f"## Governance rules in force\n{rules}\n\n"
-            f"## Upstream handoff you may read (bounded context)\n```json\n{bounded}\n```\n"
-        )
-
-    # ---- output projection ----------------------------------------------
-
-    @staticmethod
-    def _parse_output(text: str) -> tuple[dict[str, Any], tuple[str, ...], tuple[str, ...]]:
-        """Split the worker's emission into (registers, questions, findings).
-
-        The structured result is a single fenced ```json object. We accept BOTH shapes the
-        model produces in practice:
-          * enveloped — {"registers": {...}, "questions": [...]}  (the asked-for shape), and
-          * bare      — the contract object itself at top level ({"summary":..,"pipeline":..}).
-        A local model emits these interchangeably, so keying strictly on "registers" silently
-        dropped a complete, correct contract (observed on CC_QUERY_MEMPOOL_TXS_V0). Free text
-        outside the block → `findings`. A missing/unparseable block yields empty registers
-        (the engine's handoff check then flags the lossless-handoff failure)."""
-        registers: dict[str, Any] = {}
-        questions: tuple[str, ...] = ()
-        findings: tuple[str, ...] = (text,) if text else ()
-        block = OllamaWorker._last_json_block(text)
-        if block is not None:
-            try:
-                obj = json.loads(block)
-            except json.JSONDecodeError:
-                return registers, questions, findings
-            if isinstance(obj, dict):
-                reg = obj.get("registers")
-                if isinstance(reg, dict):
-                    registers = reg                       # enveloped form
-                    q = obj.get("questions") or []
-                    questions = tuple(str(x) for x in q) if isinstance(q, (list, tuple)) else ()
-                else:
-                    registers = obj                       # bare contract object
-        return registers, questions, findings
-
-    @staticmethod
-    def _last_json_block(text: str) -> str | None:
-        """Return the contents of the last ```json fenced block, if any."""
-        marker = "```json"
-        idx = text.rfind(marker)
-        if idx == -1:
-            return None
-        rest = text[idx + len(marker):]
-        end = rest.find("```")
-        return rest[:end].strip() if end != -1 else rest.strip()
+    # Task framing (`render_task`) and output parsing (`parse_output`) are shared, transport-
+    # agnostic primitives — see `_authoring`. OllamaWorker contributes only the ollama transport.
