@@ -41,6 +41,13 @@ rules in force. Do the stage's work, then emit your result as a SINGLE fenced ``
 with these keys:
   "registers": { <field>: <value>, ... }   the stage's structured outputs (copy FQDNs verbatim)
   "questions": [ <string>, ... ]            open questions for a later stage (may be empty)
+Within "registers" you MAY include ONE diagnostic key, "human_engagement": a list of
+{ "question", "why", "tradeoffs" } rows raising design decisions that tools and governance
+genuinely CANNOT answer (business policy, preference, or an ambiguous requirement only a human can
+settle). This is Part B of the Design Review Contract: questions ONLY — never state confidence,
+readiness, a percentage, or any self-evaluation (the engine certifies readiness in Part A). It is
+diagnostic only: it is not stage content and never changes a gate. Omit it entirely when you have
+no genuine human decision to raise — never fabricate one.
 Output your reasoning as plain text BEFORE the json block. Emit no machine artifact syntax —
 a downstream renderer owns that. Do not claim a change is valid; call validate and report it."""
 

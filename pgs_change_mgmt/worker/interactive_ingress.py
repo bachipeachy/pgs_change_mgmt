@@ -29,6 +29,11 @@ from ._authoring import parse_output
 _FQDN_RE = re.compile(r"\b([a-z_]+::[A-Z][A-Z0-9_]*|[A-Z]{2,}_[A-Z0-9_]+_V\d+)\b")
 _EVIDENCE_COLUMNS = frozenset({"source_finding", "evidence", "fqdn", "reference", "evidence_status"})
 
+# Diagnostic registers a worker MAY emit on ANY stage that are NOT stage content — permitted past the
+# undeclared-register check. `human_engagement` is the DRC Part-B register: the engine consumes it for
+# the design review and strips it from the handoff (kept in sync with engine.dossier.DRC_REGISTER).
+_DIAGNOSTIC_REGISTERS = frozenset({"human_engagement"})
+
 
 @dataclass(frozen=True)
 class IngressVerdict:
@@ -80,9 +85,12 @@ class InteractiveIngressValidator:
             else {f["field"] for f in self.schema.get("emit_fields", ())}
         present = tuple(sorted(registers))
 
-        # (1) undeclared keys — the human pasted something not in this stage's contract
+        # (1) undeclared keys — the human pasted something not in this stage's contract. Diagnostic
+        #     registers (the DRC Part-B `human_engagement`) are permitted on ANY stage: they are not
+        #     stage content — the engine consumes them for the design review and filters them out of the
+        #     handoff (engine.dossier.DRC_REGISTER) — so they are legitimately absent from every schema.
         for key in registers:
-            if key not in declared:
+            if key not in declared and key not in _DIAGNOSTIC_REGISTERS:
                 issues.append(f"register '{key}' is not declared by this stage's schema "
                               f"(declared: {sorted(declared)})")
 

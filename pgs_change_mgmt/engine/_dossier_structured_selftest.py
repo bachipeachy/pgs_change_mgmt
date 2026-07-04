@@ -93,7 +93,7 @@ def main() -> int:
         assert "## Document Contract" in md, "template structure not preserved"
         print("  rendered: template preserved ✓, [domain]/[subdomain] substituted ✓, rows injected ✓")
 
-        hf = json.loads((Path(tmp) / "chain" / "_handoff" / "4.json").read_text())
+        hf = json.loads((Path(tmp) / "chain" / "cr_ir" / "4.json").read_text())
         assert "capability_graph" in hf and "resources" not in hf, "handoff != declared emit-fields"
         print(f"  handoff persisted: {sorted(hf)} (declared emit-fields only — resources/relationships excluded) ✓")
 
@@ -108,6 +108,26 @@ def main() -> int:
         assert s.structured, "S6b should now use the structured path"
         assert s.ok and not s.oracle_issues, f"clean S6b oracle not clean: {s.oracle_issues}"
         assert s.rating == 5, f"clean S6b should rate 5, got {s.rating}"
+
+        # Design Review Contract — diagnostic-only, emitted alongside the stage doc.
+        import json as _json
+        from ..engine import design_review as _dr
+        drc_json = list((Path(tmp) / "chain").glob("6b_*.drc.json"))
+        assert drc_json, "S6b should emit a DRC json alongside its doc"
+        ec = _json.loads(drc_json[0].read_text())["engine_certified"]
+        assert ec["readiness"] == _dr.READY, f"clean stage DRC readiness should be READY: {ec['readiness']}"
+        assert ec["pi_queries_executed"], "DRC should record the PI queries the stage executed"
+        assert s.ok, "DRC is diagnostic-only — it must not change stage ok/gates"
+        # a stage with a declared hole → warnings + a HUMAN_DECISION unknown (projection of unresolved_cells)
+        from ..engine.dossier import StageResult
+        ec2 = _dr.assemble_engine_certified(
+            StageResult(stage="5", structured=True, unresolved_cells=["canonical selection policy"]))
+        assert ec2.readiness == _dr.READY_WITH_WARNINGS and ec2.unknowns[0].classification == _dr.HUMAN_DECISION, \
+            "a declared hole must project to READY_WITH_WARNINGS + a HUMAN_DECISION unknown"
+        # Part-B boundary oracle: worker self-evaluation is rejected
+        bad = _dr.HumanEngagement(decisions=[_dr.HumanDecision(question="95% confident, ready?", why="looks READY")])
+        assert _dr.validate_human_engagement(bad), "Part-B oracle must reject confidence/readiness/self-eval"
+        print("  DRC: engine-certified projection (readiness/PI-log/classified unknowns) + Part-B boundary oracle ✓")
 
     # NOTE: S9 (Construction Record) is intentionally NOT exercised here. It is post-construction
     # EVIDENCE produced by the Construction engine (`construct_chain.render_s9`) from the actual
@@ -128,10 +148,14 @@ def main() -> int:
         "critical_path": [{"position": "1", "code": _c + "IN_REGISTER_GENESIS_BLOCK_V0"}, {"position": "2", "code": _c + "WF_REGISTER_GENESIS_BLOCK_V0"}],
         "mandate_artifact_summary": [{"action": "NEW", "count": "6", "description": "genesis registration cluster"}],
         "field_declarations": [{"code": _c + "WF_REGISTER_GENESIS_BLOCK_V0", "subdomain_field": "chain"}, {"code": _c + "CC_WRITE_GENESIS_RECORD_V0", "subdomain_field": "chain"}],
+        "new_capabilities": [{"code": _c + "CT_PURE_GENERATE_GENESIS_ID_V0", "purpose": "generate the genesis block id",
+                              "inputs": "block:object", "outputs": "genesis_id:string"}],
+        "new_intents": [{"code": _c + "IN_REGISTER_GENESIS_BLOCK_V0", "purpose": "admit a genesis registration",
+                         "workflow": _c + "WF_REGISTER_GENESIS_BLOCK_V0", "inputs": "block:object"}],
     }
     with tempfile.TemporaryDirectory() as tmp:
         seed = replace(DOSSIER_SEEDS["blockchain_chain"], output_dir=Path(tmp) / "chain")
-        hd = Path(tmp) / "chain" / "_handoff"
+        hd = Path(tmp) / "chain" / "cr_ir"
         hd.mkdir(parents=True)
         (hd / "6b.json").write_text(json.dumps({k: CLEAN_6B[k] for k in
             ("new_artifacts", "existing_inventory", "rb_declarations", "execution_topology", "artifact_summary")}))
@@ -200,7 +224,7 @@ def main() -> int:
         assert s.rating == 4, f"S5 with a declared hole should rate 4 (§1 fills from seed): got {s.rating}"
         md = (Path(tmp) / "chain" / "5_business_intent_blockchain_chain_v0.md").read_text()
         assert "| UNRESOLVED |" in md, "the UNRESOLVED hole must render in the document"
-        assert (Path(tmp) / "chain" / "_handoff" / "5.json").exists(), \
+        assert (Path(tmp) / "chain" / "cr_ir" / "5.json").exists(), \
             "a declared hole still hands off downstream (admissible)"
         print("  S5 hole: counted + admissible + non-halting + rendered, register stays clean ✓")
 
@@ -224,6 +248,23 @@ def main() -> int:
     assert any("not in any Stage 6b register" in m for _, m in check_authoring_mandate(bad7, up)), \
         "S7 cross-stage oracle missed a re-typed code"
     print("  S7 cross-stage oracle blocks a re-typed code (not in 6b registers) ✓")
+
+    # S7 Construction Authoring Contract — new_capabilities / new_intents business-intent declarations.
+    up2 = {"new_artifacts": [{"code": "blockchain::CT_PURE_HASH_BLOCK_V0", "family": "CT"},
+                             {"code": "blockchain::IN_COMMIT_BLOCK_V0", "family": "IN"},
+                             {"code": "blockchain::WF_COMMIT_BLOCK_V0", "family": "WF"}], "existing_inventory": []}
+    clean7 = {"new_capabilities": [{"code": "blockchain::CT_PURE_HASH_BLOCK_V0", "purpose": "hash a block",
+                                    "inputs": "block:object", "outputs": "hash:string"}],
+              "new_intents": [{"code": "blockchain::IN_COMMIT_BLOCK_V0", "purpose": "admit a commit",
+                               "workflow": "blockchain::WF_COMMIT_BLOCK_V0", "inputs": "proposed_block:object"}]}
+    assert not check_authoring_mandate(clean7, up2), f"clean S7 caps/intents should pass: {check_authoring_mandate(clean7, up2)}"
+    assert any("no new_capabilities declaration" in m for _, m in check_authoring_mandate({"new_intents": clean7["new_intents"]}, up2)), \
+        "a new CT with no capability declaration must be flagged (compiler cannot realize its contract)"
+    bad_wf = {"new_capabilities": clean7["new_capabilities"],
+              "new_intents": [dict(clean7["new_intents"][0], workflow="blockchain::WF_TYPO_V0")]}
+    assert any("workflow" in m and "not a declared" in m for _, m in check_authoring_mandate(bad_wf, up2)), \
+        "an intent bound to an undeclared workflow must be flagged"
+    print("  S7 Construction Authoring Contract: new_capabilities/new_intents traceability + CT-coverage + workflow-binding ✓")
 
     # cross-register oracle catches the GENEISIS-class typo a free-form stage would relay
     from ..evaluator.design_intent_oracle import check_design_intent
@@ -251,11 +292,20 @@ def main() -> int:
          "operation": "COMPUTE", "consumes": "block", "produces": "genesis_id"},
         {"cc_code": "blockchain::CC_WRITE_GENESIS_RECORD_V0", "step": "2",
          "capability": "capability_side_effects::CS_MUTABLE_JSON_V0", "kind": "CS",
-         "operation": "SET", "consumes": "genesis_id", "produces": "result_status"},
+         "operation": "WRITE", "consumes": "genesis_id", "produces": "result_status"},
     ]
     assert not check_cc_composition(comp_clean, grounding), \
         f"clean CT→CS composition should pass: {check_cc_composition(comp_clean, grounding)}"
     print("  S6b cc_composition oracle: clean CT→CS composition passes ✓")
+
+    # op-vocabulary gate: an op the CS contract does not declare (SET vs governed WRITE) is rejected
+    comp_badop = dict(comp_clean)
+    comp_badop["cc_composition"] = [dict(s) for s in comp_clean["cc_composition"]]
+    comp_badop["cc_composition"][1]["operation"] = "SET"
+    badop = [m for _, m in check_cc_composition(comp_badop, grounding)]
+    assert any("SET" in m and "governed vocabulary" in m for m in badop), \
+        f"must reject an op not in the CS contract's core.policy.operations: {badop}"
+    print("  S6b cc_composition oracle: op outside CS governed vocabulary (SET) rejected ✓")
 
     comp_bad = dict(CLEAN_6B)
     comp_bad["cc_composition"] = [

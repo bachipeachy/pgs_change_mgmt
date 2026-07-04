@@ -1,0 +1,340 @@
+{
+  "actors": [
+    {
+      "actor": "Proposer",
+      "role": "Produces a proposed block in a consensus round.",
+      "authority_class": "Producer (upstream of the chain)",
+      "source_finding": "S1 business_vocabulary Proposer; S3 dependency EXISTING"
+    },
+    {
+      "actor": "Chain",
+      "role": "Records committed blocks and is authoritative for committed history.",
+      "authority_class": "Authoritative owner",
+      "source_finding": "S1 authority_boundaries Committed History"
+    },
+    {
+      "actor": "Genesis Actor",
+      "role": "Receives the initial minted supply at bootstrap and owns the mint wallet thereafter.",
+      "authority_class": "Permanent system actor",
+      "source_finding": "S1 business_vocabulary Genesis Actor"
+    },
+    {
+      "actor": "Consensus",
+      "role": "Decides which blocks are proposed; authoritative for a proposed block until commit.",
+      "authority_class": "Authoritative owner (proposed block)",
+      "source_finding": "S1 authority_boundaries Proposed Block"
+    }
+  ],
+  "bm_entities": [
+    {
+      "entity": "Chain",
+      "description": "The authoritative, ordered, append-only ledger of committed blocks.",
+      "store_model": "An append-only record of committed blocks plus a pointer to the most recent committed block (the head).",
+      "source_finding": "S2 entities Chain; S3 gaps chain store"
+    },
+    {
+      "entity": "Block",
+      "description": "A committed unit of the ledger carrying the transactions of its round, linked to its predecessor.",
+      "store_model": "An element of the chain; its content is hashed as its signature at commit.",
+      "source_finding": "S2 entities Block"
+    },
+    {
+      "entity": "Genesis Block",
+      "description": "The first block, created once at bootstrap, carrying the initial mint transaction.",
+      "store_model": "The single first element of the chain.",
+      "source_finding": "S2 entities Genesis Block"
+    }
+  ],
+  "events": [
+    {
+      "event": "Genesis Created",
+      "trigger": "The one-time bootstrap, before the consensus loop runs.",
+      "lifecycle_meaning": "Establishes the chain and the initial monetary state.",
+      "source_finding": "S1 business_events Genesis Created"
+    },
+    {
+      "event": "Block Proposed",
+      "trigger": "A proposer produces a block in a round.",
+      "lifecycle_meaning": "A candidate block exists; not yet authoritative.",
+      "source_finding": "S1 business_events Block Proposed"
+    },
+    {
+      "event": "Block Committed",
+      "trigger": "A proposed block is committed to the canonical chain.",
+      "lifecycle_meaning": "The block and its transactions become authoritative and immutable.",
+      "source_finding": "S1 business_events Block Committed; S3 REUSE (blockchain::EV_BLOCK_COMMITTED_V0)"
+    },
+    {
+      "event": "Balance Reconciled",
+      "trigger": "After a block is committed, balances are recomputed from the committed transactions.",
+      "lifecycle_meaning": "Wallet balances become consistent with the canonical committed history.",
+      "source_finding": "S1 business_events Balance Reconciled; S3 REUSE (blockchain::EV_BALANCE_RECONCILED_V0)"
+    }
+  ],
+  "capability_graph": [
+    {
+      "capability": "Commit a proposed block to the canonical chain",
+      "source_finding": "S3 authoring_decisions AUTHOR_NEW",
+      "status": "CRITICAL",
+      "gap_register_entry": "GAP-1",
+      "notes": "core CR outcome"
+    },
+    {
+      "capability": "Store the canonical chain ledger and track its head",
+      "source_finding": "S3 authoring_decisions AUTHOR_NEW",
+      "status": "CRITICAL",
+      "gap_register_entry": "GAP-2",
+      "notes": "append-only persistence"
+    },
+    {
+      "capability": "Validate a block's predecessor link before commit",
+      "source_finding": "S3 authoring_decisions AUTHOR_NEW",
+      "status": "CRITICAL",
+      "gap_register_entry": "GAP-3",
+      "notes": "single-predecessor invariant"
+    },
+    {
+      "capability": "Compute a block's content signature",
+      "source_finding": "S3 authoring_decisions AUTHOR_NEW",
+      "status": "CRITICAL",
+      "gap_register_entry": "GAP-4",
+      "notes": "reuses the keccak primitive underneath"
+    },
+    {
+      "capability": "Bootstrap the genesis chain and initialise the supply",
+      "source_finding": "S3 authoring_decisions AUTHOR_NEW",
+      "status": "CRITICAL",
+      "gap_register_entry": "GAP-5",
+      "notes": "one-time, before consensus"
+    },
+    {
+      "capability": "Reconcile wallet balances after commit",
+      "source_finding": "S3 authoring_decisions AUTHOR_NEW",
+      "status": "CRITICAL",
+      "gap_register_entry": "GAP-6",
+      "notes": "realises the derived-balance decision"
+    },
+    {
+      "capability": "Mint the initial genesis supply",
+      "source_finding": "S3 authoring_decisions REUSE; blockchain::WF_MINT_V0",
+      "status": "SATISFIED",
+      "gap_register_entry": "",
+      "notes": "reused as the genesis mint step"
+    },
+    {
+      "capability": "Announce that a block was committed",
+      "source_finding": "S3 authoring_decisions REUSE; blockchain::EV_BLOCK_COMMITTED_V0",
+      "status": "SATISFIED",
+      "gap_register_entry": "",
+      "notes": "existing event, emitted by the new commit capability"
+    },
+    {
+      "capability": "Announce that balances were reconciled",
+      "source_finding": "S3 authoring_decisions REUSE; blockchain::EV_BALANCE_RECONCILED_V0",
+      "status": "SATISFIED",
+      "gap_register_entry": "",
+      "notes": "existing event"
+    },
+    {
+      "capability": "Record a committed block using the existing block schema",
+      "source_finding": "S3 authoring_decisions REUSE; blockchain::ENTITY_BLOCK_V0",
+      "status": "SATISFIED",
+      "gap_register_entry": "",
+      "notes": "block schema fits exactly"
+    }
+  ],
+  "dependency_graph": [
+    {
+      "from": "chain",
+      "to": "consensus_pos",
+      "dependency_type": "data read",
+      "pps_status": "SATISFIED",
+      "source_finding": "S3 dependency EXISTING; blockchain::WF_PROPOSE_BLOCK_V0 produces the proposed block"
+    },
+    {
+      "from": "chain",
+      "to": "wallet",
+      "dependency_type": "capability call",
+      "pps_status": "SATISFIED",
+      "source_finding": "S3 dependency REUSE; blockchain::WF_MINT_V0 mints the genesis supply"
+    },
+    {
+      "from": "chain",
+      "to": "transaction",
+      "dependency_type": "data read",
+      "pps_status": "SATISFIED",
+      "source_finding": "S3 architectural_observations; balances derived from committed transactions (blockchain::ENTITY_TRANSACTION_V0)"
+    }
+  ],
+  "constraint_register": [
+    {
+      "num": "1",
+      "constraint": "Closed monetary system \u2014 no supply enters or leaves except by the system's own rules.",
+      "source_finding": "S1 constraints",
+      "source": "governance rule"
+    },
+    {
+      "num": "2",
+      "constraint": "The chain is immutable \u2014 a committed block cannot be altered or removed.",
+      "source_finding": "S1 constraints; S1 business_invariants #4",
+      "source": "invariant"
+    },
+    {
+      "num": "3",
+      "constraint": "Genesis supply is fixed at 1,000,000 BachiCoin, minted to the Genesis Actor at bootstrap.",
+      "source_finding": "S1 constraints",
+      "source": "domain knowledge"
+    },
+    {
+      "num": "4",
+      "constraint": "Exactly one genesis block exists per chain, and genesis executes exactly once and is never replayed.",
+      "source_finding": "S1 business_invariants #1, #2",
+      "source": "invariant"
+    },
+    {
+      "num": "5",
+      "constraint": "Total supply is conserved and equals 1,000,000 BachiCoin (no minting or burning after genesis).",
+      "source_finding": "S1 business_invariants #3",
+      "source": "invariant"
+    },
+    {
+      "num": "6",
+      "constraint": "Every committed block has exactly one predecessor, except the genesis block; a block cannot be committed twice.",
+      "source_finding": "S1 business_invariants #5, #6",
+      "source": "invariant"
+    },
+    {
+      "num": "7",
+      "constraint": "The canonical chain is authoritative; a proposed block is not authoritative until committed.",
+      "source_finding": "S1 business_invariants #7",
+      "source": "invariant"
+    },
+    {
+      "num": "8",
+      "constraint": "Wallet balances are derived from committed transactions and reconciled on-chain post-commit; the chain does not own balance state independently.",
+      "source_finding": "S1 known_facts #11 (human decision)",
+      "source": "domain knowledge"
+    }
+  ],
+  "gap_register": [
+    {
+      "gap_code": "GAP-1",
+      "source_finding": "S3 authoring_decisions AUTHOR_NEW; S2 gaps #1",
+      "capability": "Commit a proposed block to the canonical chain",
+      "owner_subdomain": "chain",
+      "resolution": "NEW"
+    },
+    {
+      "gap_code": "GAP-2",
+      "source_finding": "S3 authoring_decisions AUTHOR_NEW; S2 gaps #2",
+      "capability": "Store the canonical chain ledger and track its head",
+      "owner_subdomain": "chain",
+      "resolution": "NEW"
+    },
+    {
+      "gap_code": "GAP-3",
+      "source_finding": "S3 authoring_decisions AUTHOR_NEW; S2 gaps #4",
+      "capability": "Validate a block's predecessor link before commit",
+      "owner_subdomain": "chain",
+      "resolution": "NEW"
+    },
+    {
+      "gap_code": "GAP-4",
+      "source_finding": "S3 analysis_findings Q2",
+      "capability": "Compute a block's content signature",
+      "owner_subdomain": "chain",
+      "resolution": "NEW"
+    },
+    {
+      "gap_code": "GAP-5",
+      "source_finding": "S3 authoring_decisions AUTHOR_NEW; S2 gaps #3",
+      "capability": "Bootstrap the genesis chain and initialise the supply",
+      "owner_subdomain": "chain",
+      "resolution": "NEW"
+    },
+    {
+      "gap_code": "GAP-6",
+      "source_finding": "S3 authoring_decisions AUTHOR_NEW; S1 known_facts #11",
+      "capability": "Reconcile wallet balances after commit",
+      "owner_subdomain": "chain",
+      "resolution": "NEW"
+    }
+  ],
+  "design_decisions": [
+    {
+      "num": "1",
+      "decision": "The commit path is a new capability that runs downstream of block proposal and records a proposed block as canonical.",
+      "source_finding": "S3 authoring_decisions AUTHOR_NEW commit",
+      "rationale": "No commit capability exists; the chain plugs in directly after proposal.",
+      "constraints_imposed": "Realises the proposed\u2192committed transition."
+    },
+    {
+      "num": "2",
+      "decision": "The canonical chain is an append-only store with a head pointer; committed blocks are never mutated or removed.",
+      "source_finding": "S3 authoring_decisions AUTHOR_NEW chain store",
+      "rationale": "Immutability and single-predecessor invariants require durable, append-only persistence.",
+      "constraints_imposed": "Append-only persistence; no in-place mutation."
+    },
+    {
+      "num": "3",
+      "decision": "A block's content signature is computed by a new block-canonical hash transform that reuses the generic keccak primitive.",
+      "source_finding": "S3 analysis_findings Q2",
+      "rationale": "No block hash exists; cryptographic linkage is required at commit.",
+      "constraints_imposed": "Signature computed at commit as the block's identity."
+    },
+    {
+      "num": "4",
+      "decision": "The predecessor link is validated against the current chain head before a block is committed.",
+      "source_finding": "S3 analysis_findings Q3",
+      "rationale": "Enforces exactly one predecessor per committed block.",
+      "constraints_imposed": "Commit rejects a block whose predecessor does not match the head."
+    },
+    {
+      "num": "5",
+      "decision": "Genesis is a one-time bootstrap that reuses minting to initialise the supply before the consensus loop runs.",
+      "source_finding": "S3 authoring_decisions AUTHOR_NEW genesis + REUSE mint",
+      "rationale": "Genesis-once invariant; reuse minting rather than a new monetary mechanism.",
+      "constraints_imposed": "Genesis executes once, never replayed."
+    },
+    {
+      "num": "6",
+      "decision": "Wallet balances are derived and reconciled on-chain after commit; the chain does not own balance state.",
+      "source_finding": "S1 known_facts #11 (human decision)",
+      "rationale": "The human's authority decision at the S2 design review.",
+      "constraints_imposed": "Balances derived from committed transactions; reconciliation is a post-commit process."
+    },
+    {
+      "num": "7",
+      "decision": "Every proposed block is committed directly this increment; attestation and finalization are deferred.",
+      "source_finding": "S1 assumptions; S1 out_of_scope",
+      "rationale": "Incremental development decision.",
+      "constraints_imposed": "No rejection path; no attest/finalize step."
+    }
+  ],
+  "authoring_scope": [
+    {
+      "capability": "Commit a proposed block to the canonical chain",
+      "gap_register_ref": "GAP-1"
+    },
+    {
+      "capability": "Store the canonical chain ledger and track its head",
+      "gap_register_ref": "GAP-2"
+    },
+    {
+      "capability": "Validate a block's predecessor link before commit",
+      "gap_register_ref": "GAP-3"
+    },
+    {
+      "capability": "Compute a block's content signature",
+      "gap_register_ref": "GAP-4"
+    },
+    {
+      "capability": "Bootstrap the genesis chain and initialise the supply",
+      "gap_register_ref": "GAP-5"
+    },
+    {
+      "capability": "Reconcile wallet balances after commit",
+      "gap_register_ref": "GAP-6"
+    }
+  ]
+}

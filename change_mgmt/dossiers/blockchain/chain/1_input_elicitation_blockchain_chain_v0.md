@@ -78,6 +78,7 @@ its own governance boundary; it is not an extension of an existing subdomain.
 | 8 | Consensus proposes; the chain records and is the authoritative source of committed history. | HIGH |
 | 9 | In this release, the chain commits every proposed block without additional validation. | HIGH |
 | 10 | On commit, a block and its contained transactions become authoritative and immutable. | HIGH |
+| 11 | Wallet balances are derived from committed transactions and reconciled on the chain as a post-commit reconciliation process; the chain does not maintain independent balance state. | HIGH |
 
 ## 5. Existing-System Beliefs — Requiring Verification (discovery targets, NOT facts)
 
@@ -140,6 +141,7 @@ must establish.*
 | Genesis Created | Once, at bootstrap, before the consensus loop runs. | Establishes the chain and the initial monetary state. |
 | Block Proposed | When a proposer produces a block in a round. | A candidate block exists; not yet authoritative. |
 | Block Committed | When a proposed block is committed to the canonical chain. | The block and its contained transactions become authoritative and immutable. |
+| Balance Reconciled | After a block is committed, when wallet balances are recomputed from the committed transactions. | Wallet balances become consistent with the canonical committed history. |
 
 ## 11. Authority Boundaries (who is authoritative for each object)
 
@@ -149,7 +151,7 @@ must establish.*
 | Committed Block | Chain |
 | Committed History | Chain |
 | Monetary Supply | Genesis at bootstrap, then Chain |
-| Wallet Balance | Chain |
+| Wallet Balance | Chain (derived by post-commit reconciliation from committed transactions, not owned as independent state) |
 
 ## 12. Out of Scope (human — explicit release boundary)
 
@@ -177,7 +179,10 @@ must establish.*
 ## 14. Clarification Requests
 
 *The two prior blocking clarifications (what genesis produces; how commit differs from proposal)
-have been answered by the human and folded into §2 Vocabulary and §4 Known Facts. No open blocking
+have been answered by the human and folded into §2 Vocabulary and §4 Known Facts. A later
+clarification — whether the chain owns wallet-balance state or derives it — was surfaced at the S2
+design review and resolved by the human: balances are derived from committed transactions and
+reconciled on-chain post-commit (see §4 #11, §10 Balance Reconciled, §11). No open blocking
 questions remain.*
 
 (none)

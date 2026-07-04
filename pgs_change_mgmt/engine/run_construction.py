@@ -49,7 +49,7 @@ def main() -> int:
     # AUTHORITATIVE input: the governed JSON handoffs (S5/S6b/S7). The pipeline never re-parses
     # narrative markdown (Projection Completeness Principle); fidelity of these handoffs against the
     # locked baseline is a separate governed gate (evaluator.projection_fidelity / its selftest).
-    up = load_registers(CHAIN / "_handoff")
+    up = load_registers(CHAIN / "cr_ir")
     # ground the governed field vocabulary from the compiled entities (zero-invention source)
     entity_fields = load_entity_fields(os.environ.get("PGS_WORKSPACE", ""), domain="blockchain")
     model = project_build_sheets(up, domain="blockchain", subdomain="chain", entity_fields=entity_fields)

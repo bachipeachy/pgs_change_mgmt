@@ -72,7 +72,7 @@ def load_registers(handoff_dir: Path | str, stages: tuple[str, ...] = ("5", "6b"
 
     This is the AUTHORITATIVE pipeline input for S8: the projection consumes declared structured
     handoffs, never re-parses narrative markdown (the Projection Completeness Principle — see
-    doc/parkinglot/CONSTRUCTION_DOCTRINE_V0.md). Each `_handoff/<stage>.json` is already
+    doc/CONSTRUCTION_MODEL_V0.md). Each `cr_ir/<stage>.json` is already
     `{register_id: [row dicts]}`; later stages win on key collision (none expected — emit-fields are
     disjoint across stages). Fidelity of these JSON files against the locked baseline is a separate,
     governed gate (evaluator.projection_fidelity).
@@ -350,19 +350,65 @@ def _fields(cell: Any) -> list[str]:
     return [t.strip() for t in str(cell or "").split(",") if t.strip() and t.strip() not in ("—", "-")]
 
 
+def _step_no(r: dict) -> int:
+    return int(re.sub(r"[^0-9]", "", str(r.get("step", "0"))) or 0)
+
+
+def _resolve_store(step: dict, cc_code: str, up: dict[str, list]) -> tuple[str | None, str | None]:
+    """D2 lowering — the unique CS store for a step. A store is uniquely determined when exactly one
+    `structure_stores` row shares the step capability's storage_type; when several share it, the one
+    whose `used_by` names this CC disambiguates. Returns (store_name, gap_class): determined →
+    (name, None); zero of this type → (None, GAP_DOSSIER); still ambiguous → (None, GAP_DECISION)."""
+    cap = code_part(step.get("capability"))
+    by_type = [s for s in _rows(up, "structure_stores")
+               if code_part(s.get("storage_type")) == cap and s.get("store_name")]
+    names = list(dict.fromkeys(s.get("store_name") for s in by_type))
+    if len(names) == 1:
+        return names[0], None                                  # unique by storage_type → determined
+    used = list(dict.fromkeys(
+        s.get("store_name") for s in by_type
+        if any(code_part(u) == cc_code for u in str(s.get("used_by", "")).split(","))))
+    if len(used) == 1:
+        return used[0], None                                   # disambiguated by declared used_by
+    return None, ("GAP_DOSSIER" if not names else "GAP_DECISION")
+
+
 def _b_cc(sheet: BuildSheetModel, up: dict[str, list]) -> None:
-    steps = [r for r in _rows(up, "cc_composition") if code_part(r.get("cc_code", "")) == sheet.code]
-    if steps:
-        steps = sorted(steps, key=lambda r: int(re.sub(r"[^0-9]", "", str(r.get("step", "0"))) or 0))
+    raw = [r for r in _rows(up, "cc_composition") if code_part(r.get("cc_code", "")) == sheet.code]
+    if raw:
+        # Projection Closure: enrich each step with D2 store + D3 logical input bindings. Both are
+        # deterministic joins of already-governed data; anything not uniquely determined is a GAP
+        # (DETERMINISTIC_LOWERING_ONLY — never a guess). Bindings are LOGICAL (name ← step:N | input);
+        # the PAS renders the concrete JSONPath.
+        produced_so_far: dict[str, list[str]] = {}   # field → [producing step no] (prior steps only)
+        steps: list[dict] = []
+        for r in sorted(raw, key=_step_no):
+            s = dict(r)
+            if str(s.get("kind", "")).upper() == "CS":            # D2 — store
+                store, gapcls = _resolve_store(s, sheet.code, up)
+                if store:
+                    s["store"] = store
+                else:
+                    sheet.gaps.append(Gap(f"{sheet.code}.store.step{s.get('step')}", gapcls, "store",
+                                          "projection", "S6b.structure_stores"))
+            binds: dict[str, str] = {}                            # D3 — logical input bindings
+            for name in _fields(s.get("consumes", "")):
+                prod = produced_so_far.get(name, [])
+                if len(prod) > 1:
+                    binds[name] = "AMBIGUOUS"
+                    sheet.gaps.append(Gap(f"{sheet.code}.binding.{name}", "GAP_DECISION", "input_bindings",
+                                          "projection", f"{name}: produced by >1 prior step"))
+                else:
+                    binds[name] = f"step:{prod[0]}" if prod else "input"
+            s["input_bindings"] = binds
+            steps.append(s)
+            for t in _fields(s.get("produces", "")):
+                produced_so_far.setdefault(t, []).append(str(s.get("step")))
         sheet.part_b["pipeline"] = FieldValue((f"S6b.cc_composition#{sheet.code}",), PRIMARY_ONLY, OK, steps)
-        # inputs/outputs DERIVED from the composition data flow (no design): external inputs = fields
-        # a step consumes that no step produces; output = result_status (the routed outcome surface).
-        produced = {t for r in steps for t in _fields(r.get("produces", ""))}
-        inputs: list[str] = []
-        for r in steps:
-            for t in _fields(r.get("consumes", "")):
-                if t not in produced and t not in inputs:
-                    inputs.append(t)
+        # external inputs = fields bound to "input" (consumed but produced by no prior step);
+        # output = result_status (the routed outcome surface).
+        inputs = list(dict.fromkeys(
+            name for s in steps for name, src in s["input_bindings"].items() if src == "input"))
         sheet.part_b["inputs"] = FieldValue((f"S6b.cc_composition#{sheet.code}.consumes",), DERIVED, OK,
                                             inputs or ["—"])
         sheet.part_b["outputs"] = FieldValue((f"S6b.cc_composition#{sheet.code}.produces",), DERIVED, OK,

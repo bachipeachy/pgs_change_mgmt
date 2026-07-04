@@ -74,13 +74,18 @@ A required register with no rows renders as `| NONE IDENTIFIED |`.
 <!-- register:ownership business_language=capability -->
 | Capability | Owner Subdomain | Disposition (OWNED, SATISFIED, DEFERRED) | Existing Artifact | Source Finding |
 |------------|-----------------|------------------------------------------|-------------------|----------------|
-| commit a proposed block to the canonical chain | chain | OWNED |  | S5-scope-commit |
-| bootstrap genesis and mint the initial supply once | chain | OWNED |  | S5-scope-genesis |
-| the canonical ledger store for committed blocks | chain | OWNED |  | S5-scope-ledger |
-| form a proposed block from mempool transactions | consensus_pos | SATISFIED | the existing block-proposal capability | blockchain::CC_FORM_BLOCK_V0 |
-| mint supply under policy | wallet | SATISFIED | the existing mint policy | blockchain::WF_MINT_V0 |
-| signal that a block was committed | consensus_pos | SATISFIED | the existing committed-block event | blockchain::EV_BLOCK_COMMITTED_V0 |
-| attestation and finalization of committed blocks | chain | DEFERRED |  | S5-scope-attest-deferred |
+| Commit a proposed block to the canonical chain | chain | OWNED |  | S4 gap_register GAP-1 |
+| Store the canonical chain ledger and track its head | chain | OWNED |  | S4 gap_register GAP-2 |
+| Validate a block's predecessor link before commit | chain | OWNED |  | S4 gap_register GAP-3 |
+| Compute a block's content signature | chain | OWNED |  | S4 gap_register GAP-4 |
+| Bootstrap the genesis chain and initialise the supply | chain | OWNED |  | S4 gap_register GAP-5 |
+| Reconcile wallet balances after commit by deriving from committed transactions and announcing the result | chain | OWNED |  | S4 gap_register GAP-6 |
+| Mint the initial genesis supply | wallet | SATISFIED | blockchain::WF_MINT_V0 | S3 authoring_decisions REUSE |
+| Announce that a block was committed | chain | SATISFIED | blockchain::EV_BLOCK_COMMITTED_V0 | S3 authoring_decisions REUSE |
+| Announce that balances were reconciled | chain | SATISFIED | blockchain::EV_BALANCE_RECONCILED_V0 | S3 authoring_decisions REUSE |
+| Record a committed block using the existing block schema | chain | SATISFIED | blockchain::ENTITY_BLOCK_V0 | S3 authoring_decisions REUSE |
+| Attest proposed blocks | chain | DEFERRED |  | S1 out_of_scope attest |
+| Finalize committed blocks | chain | DEFERRED |  | S1 out_of_scope finalize |
 
 ---
 
@@ -91,8 +96,7 @@ A required register with no rows renders as `| NONE IDENTIFIED |`.
 <!-- register:storage_governance business_language=storage_need,purpose -->
 | Storage Need | Purpose | Subdomain | Source Finding |
 |--------------|---------|-----------|----------------|
-| canonical chain ledger — the append-only record of committed blocks | the authoritative store of committed history the chain owns | chain | S5-identity-ledger |
-| genesis block record | anchors the chain at height zero and records the initial mint | chain | S5-scope-genesis |
+| An append-only ledger of committed blocks with a pointer to the current head | Preserve the immutable, ordered history of committed blocks and identify the block a new commit must link to | chain | S5 business_objects; S4 gap_register GAP-2 |
 
 ---
 
@@ -103,10 +107,9 @@ A required register with no rows renders as `| NONE IDENTIFIED |`.
 <!-- register:cross_subdomain_deps optional business_language=dependency -->
 | Dependency | Direction | Existing Artifact | Status (SATISFIED, GAP) | Source Finding |
 |------------|-----------|-------------------|-------------------------|----------------|
-| the proposed block the chain commits | chain → consensus_pos | the existing block-proposal workflow | SATISFIED | blockchain::WF_PROPOSE_BLOCK_V0 |
-| the transactions carried in a committed block | chain → mempool | the existing mempool claim capability | SATISFIED | blockchain::CC_CLAIM_MEMPOOL_TXS_V0 |
-| the mint policy invoked at genesis | chain → wallet | the existing mint policy | SATISFIED | blockchain::WF_MINT_V0 |
-| the committed-block signal the commit capability emits | chain → consensus_pos | the existing committed-block event | SATISFIED | blockchain::EV_BLOCK_COMMITTED_V0 |
+| Read the proposed block produced by the consensus loop | chain → consensus_pos | blockchain::WF_PROPOSE_BLOCK_V0 | SATISFIED | S3 dependency_discoveries EXISTING |
+| Mint the initial supply at genesis | chain → wallet | blockchain::WF_MINT_V0 | SATISFIED | S3 authoring_decisions REUSE |
+| Announce reconciled balances for the wallet subdomain to apply to its own store | chain → wallet | blockchain::EV_BALANCE_RECONCILED_V0 | SATISFIED | S1 known_facts #11; the chain never writes the wallet store |
 
 ---
 
@@ -117,9 +120,10 @@ A required register with no rows renders as `| NONE IDENTIFIED |`.
 <!-- register:pps_artifacts_requiring_action optional -->
 | FQDN | Current Status | Action (REPLACE, REVIEW, REUSE) | Source Finding |
 |------|----------------|----------------------------------|----------------|
-| blockchain::EV_BLOCK_COMMITTED_V0 | orphan event — declared with no producer | REUSE | the new commit capability emits it, giving it its producer |
-| blockchain::WF_MINT_V0 | existing mint policy | REUSE | genesis bootstrap invokes it once |
-| blockchain::CC_FORM_BLOCK_V0 | existing block-proposal capability | REUSE | the chain consumes its output |
+| blockchain::EV_BLOCK_COMMITTED_V0 | Declared but unemitted (0 references) | REUSE | S3 verification_results; the chain becomes its emitter |
+| blockchain::EV_BALANCE_RECONCILED_V0 | Declared but unreferenced | REUSE | S3 verification_results |
+| blockchain::ENTITY_BLOCK_V0 | Exists, 0 consumers | REUSE | S3 impact_analysis |
+| blockchain::WF_MINT_V0 | Exists; reused as the genesis mint step | REUSE | S3 authoring_decisions REUSE |
 
 ---
 
@@ -130,10 +134,11 @@ A required register with no rows renders as `| NONE IDENTIFIED |`.
 <!-- register:boundary_rules optional -->
 | Rule Name | Statement | Source Finding |
 |-----------|-----------|----------------|
-| Chain owns committed history | the chain is the sole authority for committed blocks and committed history; no other subdomain writes the ledger | S1-authority-committed-history |
-| Consensus owns proposal | block proposal and consensus remain in consensus_pos; the chain never proposes, only commits | S1-authority-proposed-block |
-| Single minting path | supply is minted only via the existing mint policy, exactly once at genesis; the chain authors no second minting path | S5-invariant-closed-supply |
-| Single committed signal | the committed-block event is emitted once per committed block, by the commit capability; no duplicate event is authored | S5-invariant-single-signal |
+| Chain writes only its own store | The chain never writes a peer subdomain's store; balance reconciliation derives balances from committed transactions and announces them via an event, and the wallet subdomain updates its own balances. | S6 governance discipline; S1 known_facts #11 |
+| Committed history is immutable | A committed block is never altered or removed once recorded. | S1 business_invariants #4 |
+| Single genesis | Exactly one genesis block exists per chain; genesis runs once at bootstrap and is never replayed. | S1 business_invariants #1, #2 |
+| Chain is authoritative for committed history | A proposed block is not authoritative until it is committed to the canonical chain. | S1 business_invariants #7 |
+| Closed supply | Total supply is conserved at 1,000,000 BachiCoin after genesis; no minting or burning follows. | S1 business_invariants #3 |
 
 ---
 
@@ -144,9 +149,12 @@ A required register with no rows renders as `| NONE IDENTIFIED |`.
 <!-- register:governance_outcome optional business_language=capability -->
 | Capability | Owner Subdomain | Source Finding |
 |------------|-----------------|----------------|
-| commit a proposed block to the canonical chain | chain | S5-scope-commit |
-| bootstrap genesis and mint the initial supply once | chain | S5-scope-genesis |
-| the canonical ledger store for committed blocks | chain | S5-scope-ledger |
+| Commit a proposed block to the canonical chain | chain | S4 gap_register GAP-1 |
+| Store the canonical chain ledger and track its head | chain | S4 gap_register GAP-2 |
+| Validate a block's predecessor link before commit | chain | S4 gap_register GAP-3 |
+| Compute a block's content signature | chain | S4 gap_register GAP-4 |
+| Bootstrap the genesis chain and initialise the supply | chain | S4 gap_register GAP-5 |
+| Reconcile wallet balances after commit | chain | S4 gap_register GAP-6 |
 
 ---
 

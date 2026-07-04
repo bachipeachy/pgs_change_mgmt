@@ -104,8 +104,9 @@ binding codes belong. Existing artifacts are cited by their real FQDN in `fqdn` 
 <!-- register:design_resolution optional -->
 | Decision | Business Fact | Resolution | Source Finding |
 |----------|---------------|------------|----------------|
-| commit emits the existing committed-block event | blockchain::EV_BLOCK_COMMITTED_V0 already exists | REUSE the event; author only the commit operation | S4 design_decision #1 |
-| genesis runs once before the loop | genesis executes exactly once (S1 invariant) | bootstrap workflow is a one-time entry point | S4 design_decision #3 |
+| How the chain head is tracked for predecessor linkage | Every committed block links to exactly one predecessor (except genesis). | A mutable head-pointer store holds the current head's content signature; predecessor validation READs it and commit WRITEs it, while an append-only store holds the immutable block log. | S5 identity_semantics; S1 business_invariants #5 |
+| How genesis establishes the initial supply | The genesis block contains the first mint transaction crediting the Genesis Actor with 1,000,000 BachiCoin. | The existing mint workflow is mempool-based (grounded: writes the mempool) and genesis runs before the mempool/consensus exist; genesis therefore constructs the initial mint transaction directly inside the genesis block content supplied in the bootstrap request. The mempool mint workflow is not reused for genesis (superseding the tentative S3 reuse). | S3 authoring_decisions REUSE mint; grounded blockchain::WF_MINT_V0 internals |
+| How balance reconciliation respects the cross-subdomain-write boundary | Balances are derived from committed transactions and reconciled on-chain post-commit. | Reconciliation reads the committed history, derives balances with a pure transform, and announces them via the balance-reconciled event; the wallet subdomain applies balances to its own store. The chain never writes the wallet store. | S6 boundary_rules Chain writes only its own store; S1 known_facts #11 |
 
 ---
 
@@ -116,13 +117,15 @@ binding codes belong. Existing artifacts are cited by their real FQDN in `fqdn` 
 <!-- register:existing_inventory -->
 | FQDN | Action (REPLACE, REUSE, EXTEND, REVIEW) | Reason | Source Finding |
 |------|------------------------------------------|--------|----------------|
-| blockchain::STRUCTURE_BLOCKCHAIN_STORAGE_V0 | EXTEND | add commit semantics to the append-only block store | S3 EXTEND |
-| blockchain::EV_BLOCK_COMMITTED_V0 | REUSE | emitted by the new commit operation | S3 REUSE event |
-| blockchain::RB_RUN_CONSENSUS_LOOP_V0 | REUSE | produces the proposed blocks to commit | S3 REUSE consensus |
-| blockchain::CC_INVOKE_BLOCK_PROPOSAL_V0 | REUSE | produces the proposed block | S3 REUSE proposal |
-| blockchain::RB_MINT_V0 | REUSE | mints the genesis supply | S3 REUSE mint |
-| blockchain::RB_CREATE_WALLET_V0 | REUSE | creates the MINT wallet | S3 REUSE wallet |
-| blockchain::RB_REGISTER_ACTOR_UNVERIFIED_V0 | REUSE | registers the Genesis Actor | S3 REUSE actor |
+| blockchain::ENTITY_BLOCK_V0 | REUSE | The committed block record schema. | S3 authoring_decisions REUSE |
+| blockchain::EV_BLOCK_COMMITTED_V0 | REUSE | Emitted by the commit capability. | S3 authoring_decisions REUSE |
+| blockchain::EV_BALANCE_RECONCILED_V0 | REUSE | Emitted by the reconciliation capability. | S3 authoring_decisions REUSE |
+| blockchain::WF_PROPOSE_BLOCK_V0 | REUSE | Upstream producer of the proposed block the chain commits. | S3 dependency_discoveries EXISTING |
+| capability_transforms::CT_PURE_KECCAK256_HASH_V0 | REUSE | The generic hash primitive reused inside the block-content hash transform. | S3 analysis_findings Q2 |
+| capability_side_effects::CS_MUTABLE_JSON_V0 | REUSE | The mutable substrate for the head-pointer store (READ/WRITE). | S4 gap_register GAP-2 |
+| capability_side_effects::CS_APPENDONLY_JSONL_V0 | REUSE | The append-only substrate for the committed block log (APPEND/GET_ALL). | S4 gap_register GAP-2 |
+| blockchain::CC_VALIDATE_MINT_POLICY_V0 | REVIEW | The genesis mint conforms to the existing mint policy; genesis constructs the mint directly in the block rather than via the mempool mint workflow. | design_resolution genesis mint |
+| blockchain::WF_MINT_V0 | REVIEW | Mempool-based mint workflow; not reused for pre-consensus genesis (see design_resolution). | design_resolution genesis mint |
 
 ---
 
@@ -135,18 +138,22 @@ binding codes belong. Existing artifacts are cited by their real FQDN in `fqdn` 
 <!-- register:new_artifacts business_language=capability -->
 | Capability | Family (AC, IN, WF, RB, CC, CT, EV, STRUCTURE) | Code | Owner Subdomain | Status | Source Finding |
 |------------|------------------------------------------------|------|-----------------|--------|----------------|
-| admit a commit request | IN | blockchain::IN_COMMIT_BLOCK_V0 | chain | NEW | S4 authoring_scope |
-| commit a proposed block to the canonical chain | WF | blockchain::WF_COMMIT_BLOCK_V0 | chain | NEW | S4 authoring_scope |
-| bind the commit workflow | RB | blockchain::RB_COMMIT_BLOCK_V0 | chain | NEW | S4 authoring_scope |
-| append the validated block to the canonical chain | CC | blockchain::CC_COMMIT_BLOCK_CANONICAL_V0 | chain | NEW | S4 authoring_scope |
-| validate the block links to the current chain head | CC | blockchain::CC_VALIDATE_PREDECESSOR_LINK_V0 | chain | NEW | S4 authoring_scope |
-| compute the block content hash (signature) | CT | blockchain::CT_PURE_HASH_BLOCK_V0 | chain | NEW | S4 authoring_scope |
-| compare two values for equality (generic primitive) | CT | capability_transforms::CT_PURE_COMPARE_EQUAL_V0 | capability_transforms | NEW | S6b composition gap — CC_VALIDATE_PREDECESSOR_LINK; shared reusable CT, not a blockchain rule |
-| admit a genesis bootstrap request | IN | blockchain::IN_BOOTSTRAP_GENESIS_CHAIN_V0 | chain | NEW | S4 authoring_scope |
-| create the genesis block and mint the initial supply | WF | blockchain::WF_BOOTSTRAP_GENESIS_CHAIN_V0 | chain | NEW | S4 authoring_scope |
-| bind the genesis bootstrap workflow | RB | blockchain::RB_BOOTSTRAP_GENESIS_CHAIN_V0 | chain | NEW | S4 authoring_scope |
-| create the chain's first block | CC | blockchain::CC_CREATE_GENESIS_BLOCK_V0 | chain | NEW | S4 authoring_scope |
-| emit that the genesis block was created | EV | blockchain::EV_GENESIS_CREATED_V0 | chain | NEW | S4 authoring_scope |
+| Admit a request to commit a proposed block | IN | blockchain::IN_COMMIT_BLOCK_V0 | chain | NEW | S5 provisional_codes; S6 governance_outcome |
+| Commit a proposed block to the canonical chain | WF | blockchain::WF_COMMIT_BLOCK_V0 | chain | NEW | S5 actions Commit |
+| Validate a block's predecessor link before commit | CC | blockchain::CC_VALIDATE_PREDECESSOR_LINK_V0 | chain | NEW | S4 gap_register GAP-3 |
+| Record a validated block as canonical on the chain | CC | blockchain::CC_COMMIT_BLOCK_CANONICAL_V0 | chain | NEW | S4 gap_register GAP-1 |
+| Reconcile wallet balances after commit and announce them | CC | blockchain::CC_RECONCILE_BALANCES_V0 | chain | NEW | S4 gap_register GAP-6 |
+| Admit a request to bootstrap the genesis chain | IN | blockchain::IN_BOOTSTRAP_GENESIS_CHAIN_V0 | chain | NEW | S5 provisional_codes |
+| Bootstrap the genesis chain and initialise the supply | WF | blockchain::WF_BOOTSTRAP_GENESIS_CHAIN_V0 | chain | NEW | S5 actions Bootstrap |
+| Create the genesis block and record it as the first committed block | CC | blockchain::CC_CREATE_GENESIS_BLOCK_V0 | chain | NEW | S4 gap_register GAP-5 |
+| Compute a block's content signature | CT | blockchain::CT_PURE_HASH_BLOCK_V0 | chain | NEW | S4 gap_register GAP-4 |
+| Extract a block's predecessor hash | CT | blockchain::CT_PURE_EXTRACT_PREDECESSOR_HASH_V0 | chain | NEW | S4 gap_register GAP-3 |
+| Derive wallet balances from committed transactions | CT | blockchain::CT_PURE_DERIVE_BALANCES_V0 | chain | NEW | S4 gap_register GAP-6 |
+| Compare two values for equality | CT | capability_transforms::CT_PURE_COMPARE_EQUAL_V0 | capability_transforms | NEW | S4 gap_register GAP-3 (shared primitive) |
+| Announce that the genesis chain was created | EV | blockchain::EV_GENESIS_CREATED_V0 | chain | NEW | S1 business_events Genesis Created |
+| Declare the chain storage (block log and head pointer) | STRUCTURE | blockchain::STRUCTURE_CHAIN_STORAGE_V0 | chain | NEW | S4 gap_register GAP-2; S6 storage_governance |
+| Bind the commit workflow to its stores | RB | blockchain::RB_COMMIT_BLOCK_V0 | chain | NEW | S6 governance_outcome |
+| Bind the genesis workflow to its stores | RB | blockchain::RB_BOOTSTRAP_GENESIS_CHAIN_V0 | chain | NEW | S6 governance_outcome |
 
 ---
 
@@ -157,8 +164,8 @@ binding codes belong. Existing artifacts are cited by their real FQDN in `fqdn` 
 <!-- register:rb_declarations -->
 | RB Code | Binds WF | CS Bindings | Storage Structure | Source Finding |
 |---------|----------|-------------|-------------------|----------------|
-| blockchain::RB_COMMIT_BLOCK_V0 | blockchain::WF_COMMIT_BLOCK_V0 | capability_side_effects::CS_APPENDONLY_JSONL_V0, capability_side_effects::CS_MUTABLE_JSON_V0 | blockchain::STRUCTURE_BLOCKCHAIN_STORAGE_V0 | S6 storage_governance; CS_MUTABLE_JSON_V0 — CC_COMMIT writes chain_head |
-| blockchain::RB_BOOTSTRAP_GENESIS_CHAIN_V0 | blockchain::WF_BOOTSTRAP_GENESIS_CHAIN_V0 | capability_side_effects::CS_APPENDONLY_JSONL_V0, capability_side_effects::CS_MUTABLE_JSON_V0 | blockchain::STRUCTURE_BLOCKCHAIN_STORAGE_V0 | S6 storage_governance; genesis writes chain_head |
+| blockchain::RB_COMMIT_BLOCK_V0 | blockchain::WF_COMMIT_BLOCK_V0 | capability_side_effects::CS_APPENDONLY_JSONL_V0, capability_side_effects::CS_MUTABLE_JSON_V0 | blockchain::STRUCTURE_CHAIN_STORAGE_V0 | S6 governance_outcome |
+| blockchain::RB_BOOTSTRAP_GENESIS_CHAIN_V0 | blockchain::WF_BOOTSTRAP_GENESIS_CHAIN_V0 | capability_side_effects::CS_APPENDONLY_JSONL_V0, capability_side_effects::CS_MUTABLE_JSON_V0 | blockchain::STRUCTURE_CHAIN_STORAGE_V0 | S6 governance_outcome |
 
 ---
 
@@ -169,13 +176,15 @@ binding codes belong. Existing artifacts are cited by their real FQDN in `fqdn` 
 <!-- register:execution_topology -->
 | Workflow | Node | Node Type (IN, CC, EXIT, EXIT_SUCCESS) | Routing | Source Finding |
 |----------|------|----------------------------------------|---------|----------------|
-| blockchain::WF_COMMIT_BLOCK_V0 | blockchain::IN_COMMIT_BLOCK_V0 | IN | ACK -> CC_VALIDATE_PREDECESSOR_LINK_V0, NACK -> EXIT | S6b |
-| blockchain::WF_COMMIT_BLOCK_V0 | blockchain::CC_VALIDATE_PREDECESSOR_LINK_V0 | CC | SUCCESS -> CC_COMMIT_BLOCK_CANONICAL_V0, VIOLATION -> EXIT | S6b |
-| blockchain::WF_COMMIT_BLOCK_V0 | blockchain::CC_COMMIT_BLOCK_CANONICAL_V0 | CC | SUCCESS -> EXIT_SUCCESS, ALREADY_EXISTS -> EXIT | S6b |
-| blockchain::WF_COMMIT_BLOCK_V0 | EXIT_SUCCESS | EXIT_SUCCESS | - | S6b |
-| blockchain::WF_BOOTSTRAP_GENESIS_CHAIN_V0 | blockchain::IN_BOOTSTRAP_GENESIS_CHAIN_V0 | IN | ACK -> CC_CREATE_GENESIS_BLOCK_V0, NACK -> EXIT | S6b |
-| blockchain::WF_BOOTSTRAP_GENESIS_CHAIN_V0 | blockchain::CC_CREATE_GENESIS_BLOCK_V0 | CC | SUCCESS -> EXIT_SUCCESS, ALREADY_EXISTS -> EXIT | S6b |
-| blockchain::WF_BOOTSTRAP_GENESIS_CHAIN_V0 | EXIT_SUCCESS | EXIT_SUCCESS | - | S6b |
+| blockchain::WF_COMMIT_BLOCK_V0 | blockchain::IN_COMMIT_BLOCK_V0 | IN | SUCCESS -> blockchain::CC_VALIDATE_PREDECESSOR_LINK_V0 | S5 actions Commit |
+| blockchain::WF_COMMIT_BLOCK_V0 | blockchain::CC_VALIDATE_PREDECESSOR_LINK_V0 | CC | SUCCESS -> blockchain::CC_COMMIT_BLOCK_CANONICAL_V0, VIOLATION -> EXIT | S4 gap_register GAP-3 |
+| blockchain::WF_COMMIT_BLOCK_V0 | blockchain::CC_COMMIT_BLOCK_CANONICAL_V0 | CC | SUCCESS -> blockchain::CC_RECONCILE_BALANCES_V0 | S4 gap_register GAP-1 |
+| blockchain::WF_COMMIT_BLOCK_V0 | blockchain::CC_RECONCILE_BALANCES_V0 | CC | SUCCESS -> EXIT_SUCCESS | S4 gap_register GAP-6 |
+| blockchain::WF_COMMIT_BLOCK_V0 | EXIT_SUCCESS | EXIT_SUCCESS |  | S5 actions Commit |
+| blockchain::WF_COMMIT_BLOCK_V0 | EXIT | EXIT |  | S1 business_invariants #5 (predecessor mismatch rejected) |
+| blockchain::WF_BOOTSTRAP_GENESIS_CHAIN_V0 | blockchain::IN_BOOTSTRAP_GENESIS_CHAIN_V0 | IN | SUCCESS -> blockchain::CC_CREATE_GENESIS_BLOCK_V0 | S5 actions Bootstrap |
+| blockchain::WF_BOOTSTRAP_GENESIS_CHAIN_V0 | blockchain::CC_CREATE_GENESIS_BLOCK_V0 | CC | SUCCESS -> EXIT_SUCCESS | S4 gap_register GAP-5 |
+| blockchain::WF_BOOTSTRAP_GENESIS_CHAIN_V0 | EXIT_SUCCESS | EXIT_SUCCESS |  | S5 actions Bootstrap |
 
 ---
 
@@ -190,14 +199,17 @@ outcomes the composition can yield must cover the CC's routing surface in `execu
 <!-- register:cc_composition optional -->
 | CC Code | Step | Capability | Kind (CT, CS) | Operation | Consumes | Produces |
 |---------|------|------------|---------------|-----------|----------|----------|
+| blockchain::CC_VALIDATE_PREDECESSOR_LINK_V0 | 1 | capability_side_effects::CS_MUTABLE_JSON_V0 | CS | READ |  | current_head |
+| blockchain::CC_VALIDATE_PREDECESSOR_LINK_V0 | 2 | blockchain::CT_PURE_EXTRACT_PREDECESSOR_HASH_V0 | CT | COMPUTE | proposed_block | predecessor_hash |
+| blockchain::CC_VALIDATE_PREDECESSOR_LINK_V0 | 3 | capability_transforms::CT_PURE_COMPARE_EQUAL_V0 | CT | COMPUTE | predecessor_hash, current_head | is_match |
 | blockchain::CC_COMMIT_BLOCK_CANONICAL_V0 | 1 | blockchain::CT_PURE_HASH_BLOCK_V0 | CT | COMPUTE | proposed_block | content_hash |
-| blockchain::CC_COMMIT_BLOCK_CANONICAL_V0 | 2 | capability_side_effects::CS_APPENDONLY_JSONL_V0 | CS | APPEND | proposed_block, content_hash | block_record |
-| blockchain::CC_COMMIT_BLOCK_CANONICAL_V0 | 3 | capability_side_effects::CS_MUTABLE_JSON_V0 | CS | SET | content_hash | chain_head |
-| blockchain::CC_CREATE_GENESIS_BLOCK_V0 | 1 | blockchain::CT_PURE_HASH_BLOCK_V0 | CT | COMPUTE | genesis_block_content | genesis_block_hash |
-| blockchain::CC_CREATE_GENESIS_BLOCK_V0 | 2 | capability_side_effects::CS_APPENDONLY_JSONL_V0 | CS | APPEND | genesis_block_content, genesis_block_hash | genesis_block_record |
-| blockchain::CC_CREATE_GENESIS_BLOCK_V0 | 3 | capability_side_effects::CS_MUTABLE_JSON_V0 | CS | SET | genesis_block_hash | chain_head |
-| blockchain::CC_VALIDATE_PREDECESSOR_LINK_V0 | 1 | capability_side_effects::CS_MUTABLE_JSON_V0 | CS | GET | — | current_head |
-| blockchain::CC_VALIDATE_PREDECESSOR_LINK_V0 | 2 | capability_transforms::CT_PURE_COMPARE_EQUAL_V0 | CT | COMPUTE | proposed_block.predecessor_hash, current_head | is_match |
+| blockchain::CC_COMMIT_BLOCK_CANONICAL_V0 | 2 | capability_side_effects::CS_APPENDONLY_JSONL_V0 | CS | APPEND | proposed_block, content_hash | committed_block |
+| blockchain::CC_COMMIT_BLOCK_CANONICAL_V0 | 3 | capability_side_effects::CS_MUTABLE_JSON_V0 | CS | WRITE | content_hash | updated_head |
+| blockchain::CC_CREATE_GENESIS_BLOCK_V0 | 1 | blockchain::CT_PURE_HASH_BLOCK_V0 | CT | COMPUTE | genesis_block_content | content_hash |
+| blockchain::CC_CREATE_GENESIS_BLOCK_V0 | 2 | capability_side_effects::CS_APPENDONLY_JSONL_V0 | CS | APPEND | genesis_block_content, content_hash | genesis_block |
+| blockchain::CC_CREATE_GENESIS_BLOCK_V0 | 3 | capability_side_effects::CS_MUTABLE_JSON_V0 | CS | WRITE | content_hash | head |
+| blockchain::CC_RECONCILE_BALANCES_V0 | 1 | capability_side_effects::CS_APPENDONLY_JSONL_V0 | CS | GET_ALL |  | committed_history |
+| blockchain::CC_RECONCILE_BALANCES_V0 | 2 | blockchain::CT_PURE_DERIVE_BALANCES_V0 | CT | COMPUTE | committed_history | reconciled_balances |
 
 ---
 
@@ -208,8 +220,8 @@ outcomes the composition can yield must cover the CC's routing surface in `execu
 <!-- register:structure_stores optional -->
 | Store Name | Storage Type (CS_APPENDONLY_JSONL_V0, CS_MUTABLE_JSON_V0) | Proposed Path | Used By | Source Finding |
 |------------|-----------------------------------------------------------|---------------|---------|----------------|
-| canonical_blocks | CS_APPENDONLY_JSONL_V0 | blockchain/chain/blocks.jsonl | blockchain::CC_COMMIT_BLOCK_CANONICAL_V0, blockchain::CC_CREATE_GENESIS_BLOCK_V0 | S6 storage; genesis writer added |
-| chain_head | CS_MUTABLE_JSON_V0 | blockchain/chain/head.json | blockchain::CC_COMMIT_BLOCK_CANONICAL_V0, blockchain::CC_CREATE_GENESIS_BLOCK_V0 | S6 storage; genesis writer added |
+| chain | CS_APPENDONLY_JSONL_V0 | {module_data_root}/blockchain/chain/chain.jsonl | blockchain::CC_COMMIT_BLOCK_CANONICAL_V0, blockchain::CC_CREATE_GENESIS_BLOCK_V0, blockchain::CC_RECONCILE_BALANCES_V0 | S4 gap_register GAP-2 |
+| chain_head | CS_MUTABLE_JSON_V0 | {module_data_root}/blockchain/chain/chain_head.json | blockchain::CC_COMMIT_BLOCK_CANONICAL_V0, blockchain::CC_CREATE_GENESIS_BLOCK_V0, blockchain::CC_VALIDATE_PREDECESSOR_LINK_V0 | S5 identity_semantics; S1 business_invariants #5 |
 
 ---
 
@@ -220,9 +232,8 @@ outcomes the composition can yield must cover the CC's routing surface in `execu
 <!-- register:artifact_summary -->
 | Action (REPLACE, EXTEND, NEW) | Subdomain | Count | Artifacts |
 |-------------------------------|-----------|-------|-----------|
-| NEW | chain | 11 | IN/WF/RB/CC/CC/CT (commit) + IN/WF/RB/CC/EV (genesis) |
-| NEW | capability_transforms | 1 | CT_PURE_COMPARE_EQUAL_V0 (shared comparison primitive) |
-| EXTEND | chain | 1 | STRUCTURE_BLOCKCHAIN_STORAGE_V0 |
+| NEW | chain | 15 | blockchain::IN_COMMIT_BLOCK_V0, blockchain::WF_COMMIT_BLOCK_V0, blockchain::CC_VALIDATE_PREDECESSOR_LINK_V0, blockchain::CC_COMMIT_BLOCK_CANONICAL_V0, blockchain::CC_RECONCILE_BALANCES_V0, blockchain::IN_BOOTSTRAP_GENESIS_CHAIN_V0, blockchain::WF_BOOTSTRAP_GENESIS_CHAIN_V0, blockchain::CC_CREATE_GENESIS_BLOCK_V0, blockchain::CT_PURE_HASH_BLOCK_V0, blockchain::CT_PURE_EXTRACT_PREDECESSOR_HASH_V0, blockchain::CT_PURE_DERIVE_BALANCES_V0, blockchain::EV_GENESIS_CREATED_V0, blockchain::STRUCTURE_CHAIN_STORAGE_V0, blockchain::RB_COMMIT_BLOCK_V0, blockchain::RB_BOOTSTRAP_GENESIS_CHAIN_V0 |
+| NEW | capability_transforms | 1 | capability_transforms::CT_PURE_COMPARE_EQUAL_V0 |
 
 ---
 

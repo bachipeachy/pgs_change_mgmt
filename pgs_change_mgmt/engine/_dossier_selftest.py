@@ -108,7 +108,7 @@ def main() -> int:
             PiGroundingProvider(), seed, stages=("1", "2", "3", "4"), runs_root=Path(tmp) / "runs")
         s3 = next(s for s in result.stages if s.stage == "3")
         assert s3.halt_reason == HALT_EMPTY_EMIT and not s3.ok, "empty S3 projection must be inadmissible"
-        assert not (Path(tmp) / "chain" / "_handoff" / "3.json").exists(), \
+        assert not (Path(tmp) / "chain" / "cr_ir" / "3.json").exists(), \
             "empty projection must NOT persist a consumable handoff (the bug)"
         assert [s.stage for s in result.stages] == ["1", "2", "3"], "pipeline must HALT before S4"
         assert not result.ok
@@ -132,7 +132,7 @@ def main() -> int:
                              stages=("1", "2", "3"), runs_root=Path(tmp) / "runs")
         s2 = next(s for s in result.stages if s.stage == "2")
         assert s2.halt_reason == HALT_SPINE_INVALID and not s2.ok, "incomplete spine must be inadmissible"
-        assert not (Path(tmp) / "chain" / "_handoff" / "2.json").exists()
+        assert not (Path(tmp) / "chain" / "cr_ir" / "2.json").exists()
         assert [s.stage for s in result.stages] == ["1", "2"], "pipeline must HALT before S3"
         print(f"  spine gate ✓ — S2 empty belief ledger → INADMISSIBLE [{s2.halt_reason}], "
               f"no 2.json persisted, halted before S3; defect: {s2.spine_defects[0]}")

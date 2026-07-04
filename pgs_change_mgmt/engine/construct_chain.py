@@ -91,7 +91,7 @@ def main() -> int:
 
 def run(*, registry_root: Path, workspace: Path, builder, kinds=("CC",)) -> int:
     # ---- S8: entity-grounded Build Sheet Set, persisted to the dossier ----
-    up = load_registers(CHAIN / "_handoff")
+    up = load_registers(CHAIN / "cr_ir")
     entity_fields = load_entity_fields(workspace, domain=DOMAIN)
     model = project_build_sheets(up, domain=DOMAIN, subdomain=SUBDOMAIN, entity_fields=entity_fields)
     assert_construction_closed(model)

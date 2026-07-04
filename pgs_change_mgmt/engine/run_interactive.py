@@ -14,7 +14,7 @@ validation / handoff / figure-of-merit as the automated path; only the transport
 
 Export is pure governance (no model). Import ingress-validates at the human mutation boundary BEFORE
 the engine sees the response, then runs `DossierEngine` for that one stage with `InteractiveWorker` —
-producing the SAME document + `_handoff/<stage>.json` + figure-of-merit an automated worker would.
+producing the SAME document + `cr_ir/<stage>.json` + figure-of-merit an automated worker would.
 """
 
 from __future__ import annotations

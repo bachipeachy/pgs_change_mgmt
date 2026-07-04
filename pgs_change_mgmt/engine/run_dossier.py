@@ -7,7 +7,7 @@
     python -m pgs_change_mgmt.engine.run_dossier --worker claude --model claude-opus-4-8 --stage 6b
 
 Authors ONE stage at a time and STOPS for human disposition: review the document, the
-standalone handoff (`chain/_handoff/<stage>.json`), and the verbose grounding log, then
+standalone handoff (`chain/cr_ir/<stage>.json`), and the verbose grounding log, then
 re-run the stage to regenerate or advance to the next. The bounded gov_projection is the
 only thing that crosses to the next stage, persisted to disk so stages resume across runs.
 

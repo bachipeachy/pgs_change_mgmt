@@ -321,7 +321,7 @@ def _project_build_sheet_stage(engine: "DossierEngine", cfg: "DossierSeedConfig"
     # AUTHORITATIVE input: the governed JSON handoffs (S5/S6b/S7), each guaranteed faithful to its
     # rendered doc by the per-stage PROJECTION_FIDELITY gate. S8 assembles from declared structured
     # projections and never re-parses narrative markdown (Projection Completeness Principle).
-    up = load_registers(cfg.output_dir / "_handoff")
+    up = load_registers(cfg.output_dir / "cr_ir")
     # ground the governed field vocabulary from compiled entities (zero-invention construction source)
     entity_fields = load_entity_fields(os.environ.get("PGS_WORKSPACE", ""), domain=cfg.domain)
     model = project_build_sheets(up, domain=cfg.domain, subdomain=cfg.subdomain, entity_fields=entity_fields)
@@ -354,6 +354,25 @@ def _project_build_sheet_stage(engine: "DossierEngine", cfg: "DossierSeedConfig"
 STAGE_PROJECTORS = {"8": _project_build_sheet_stage}
 
 
+DRC_REGISTER = "human_engagement"   # DRC Part B — worker questions; a diagnostic register, never stage content
+
+
+class _PiLoggingGrounding:
+    """Transparent grounding proxy that records executed queries for the DRC (diagnostic only) — it
+    delegates everything and only appends `op(args)` strings to a sink; never alters behaviour."""
+
+    def __init__(self, inner: Any, sink: list[str]) -> None:
+        object.__setattr__(self, "_inner", inner)
+        object.__setattr__(self, "_sink", sink)
+
+    def query(self, op: str, **kwargs: Any) -> Any:
+        self._sink.append(f"{op}(" + ", ".join(f"{k}={v}" for k, v in kwargs.items()) + ")")
+        return self._inner.query(op, **kwargs)
+
+    def __getattr__(self, name: str) -> Any:
+        return getattr(self._inner, name)
+
+
 class DossierEngine:
     """Drives the staged S1→S8 dossier authoring across worker + grounding + evaluator."""
 
@@ -361,7 +380,8 @@ class DossierEngine:
                  evaluator: Evaluator | None = None, runs_root: Path | None = None,
                  verbose: bool = False) -> None:
         self.worker = worker
-        self.grounding = grounding
+        self._pi_log: list[str] = []                       # DRC: PI queries executed (reset per stage)
+        self.grounding = _PiLoggingGrounding(grounding, self._pi_log)
         self.evaluator = evaluator if evaluator is not None else IdentityEvaluator()
         self.runs_root = runs_root or (PKG_REPO / "engine_runs")
         self.verbose = verbose
@@ -404,6 +424,7 @@ class DossierEngine:
     # ---- one stage -------------------------------------------------------
 
     def _run_stage(self, cfg: DossierSeedConfig, stage: str, log: RunLog) -> StageResult:
+        self._pi_log.clear()                               # DRC: fresh per-stage PI query log
         # plugin dispatch: a projected stage (e.g. S8 Build Sheet) is assembled, not worker-authored.
         if stage in STAGE_PROJECTORS:
             return STAGE_PROJECTORS[stage](self, cfg, stage, log)
@@ -431,7 +452,10 @@ class DossierEngine:
         if sr.structured:
             # structured intent → deterministic renderer + structural oracle (no free-form doc).
             # The register schema is compiled from the template (single source of truth).
-            data = {k: v for k, v in dict(output.registers).items() if isinstance(v, list)}
+            # `human_engagement` is a DRC-only register (worker Part B) — it is NOT stage content, so it
+            # is excluded here: it must never reach the structural oracle or the handoff (diagnostic-only).
+            data = {k: v for k, v in dict(output.registers).items()
+                    if isinstance(v, list) and k != DRC_REGISTER}
             renderer = DossierStageRenderer(template)
             oracle = renderer.check(data)
             # Stage-6b binding-FQDN integrity: cross-register checks the per-register oracle cannot
@@ -497,7 +521,8 @@ class DossierEngine:
                 belief_allowed = renderer.registers["belief_verification"].enums.get(
                     "result", DEFAULT_BELIEF_RESULTS)
         else:
-            proj = GovProjection(stage=stage, values=dict(output.registers))
+            proj = GovProjection(stage=stage, values={k: v for k, v in dict(output.registers).items()
+                                                       if k != DRC_REGISTER})
             doc = self._document(output)
             sr.missing = proj.missing_fields()
             sr.extra = proj.extra_fields()
@@ -574,6 +599,30 @@ class DossierEngine:
                 "\n\n".join(output.findings) or "(empty)")
         if self.verbose:
             self._print_footer(sr, doc_path)
+
+        # Design Review Contract — diagnostic only. Part A is an engine-certified projection of `sr`;
+        # Part B is the bounded worker human-engagement (validated: no confidence/readiness/self-eval).
+        # It never touches sr.ok, gates, or sequencing — it only makes the reasoning boundaries visible.
+        from . import design_review as _dr
+        he_rows = dict(getattr(output, "registers", {}) or {}).get(DRC_REGISTER)
+        he = None
+        if he_rows:
+            he = _dr.HumanEngagement(decisions=[
+                _dr.HumanDecision(question=str(r.get("question", "")), why=str(r.get("why", "")),
+                                  tradeoffs=str(r.get("tradeoffs", "")))
+                for r in he_rows if isinstance(r, dict)])
+            part_b_issues = _dr.validate_human_engagement(he)
+            if part_b_issues:                              # bounded-worker oracle: strayed into engine territory
+                log.event("drc_part_b_rejected", stage=stage, issues=part_b_issues)
+                he = None
+        drc_obj = _dr.build_drc(sr, pi_queries=list(self._pi_log), human_engagement=he)
+        stem = f"{STAGE_BASENAME[stage]}_{cfg.domain}_{cfg.subdomain}_v0"
+        (cfg.output_dir / f"{stem}.drc.json").write_text(json.dumps(drc_obj.to_dict(), indent=2))
+        (cfg.output_dir / f"{stem}.drc.md").write_text(_dr.render(drc_obj))
+        log.event("design_review_contract", stage=stage,
+                  readiness=drc_obj.engine_certified.readiness,
+                  unknowns=len(drc_obj.engine_certified.unknowns),
+                  human_decisions=len(he.decisions) if he else 0)
         return sr
 
     def _print_footer(self, sr: StageResult, doc_path: Path) -> None:
@@ -698,6 +747,12 @@ class DossierEngine:
             "NEVER fabricate a value to fill it; NEVER leave it blank. A declared hole is a "
             "governed gap a human will resolve; a guess is a violation. Use this sparingly — only "
             "for irreducible business knowledge you were not given.",
+            "DESIGN REVIEW (optional) — you MAY also emit a `human_engagement` register: rows of "
+            '{ "question", "why", "tradeoffs" } naming genuine DESIGN DECISIONS only a human can make '
+            "(business policy, ambiguous requirement, a tradeoff PI/governance cannot resolve). This is "
+            "the ONE place you raise questions for the architect. State ONLY the question, why it matters, "
+            "and the tradeoffs — NEVER a confidence score, readiness verdict, or self-evaluation (the "
+            "engine certifies those). Nothing to ask → omit it or [].",
             "Emit exactly these registers:",
             "\n".join(specs),
         ]
@@ -724,7 +779,7 @@ class DossierEngine:
 
     @staticmethod
     def _handoff_path(cfg: DossierSeedConfig, stage: str) -> Path:
-        return cfg.output_dir / "_handoff" / f"{stage}.json"
+        return cfg.output_dir / "cr_ir" / f"{stage}.json"
 
     def _save_handoff(self, cfg: DossierSeedConfig, stage: str, proj: GovProjection) -> None:
         p = self._handoff_path(cfg, stage)

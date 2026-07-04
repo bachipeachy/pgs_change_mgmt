@@ -4,6 +4,7 @@
 **Version:** V0  
 **Status:** DRAFT  
 **Pipeline Stage:** Stage 9 — Construction Record  
+**Governed By:** fb.change_mgmt::CONSTITUTION_CONSTRUCTION_V0  
 **Source Build Sheet:** 8_build_sheet_[subdomain]_v0.md  
 
 ---

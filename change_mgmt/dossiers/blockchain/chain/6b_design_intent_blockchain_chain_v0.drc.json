@@ -1,0 +1,38 @@
+{
+  "stage": "6b",
+  "engine_certified": {
+    "readiness": "READY_FOR_NEXT_STAGE",
+    "oracle_verdicts": [
+      "clean \u2014 no structural-oracle findings"
+    ],
+    "grounding_coverage": 1.0,
+    "pi_queries_executed": [
+      "vocab_search(term=CC_COMMIT_BLOCK_CANONICAL_V0)",
+      "vocab_search(term=CC_CREATE_GENESIS_BLOCK_V0)",
+      "vocab_search(term=CC_RECONCILE_BALANCES_V0)",
+      "vocab_search(term=CC_VALIDATE_PREDECESSOR_LINK_V0)",
+      "vocab_search(term=CT_PURE_COMPARE_EQUAL_V0)",
+      "vocab_search(term=CT_PURE_DERIVE_BALANCES_V0)",
+      "vocab_search(term=CT_PURE_EXTRACT_PREDECESSOR_HASH_V0)",
+      "vocab_search(term=CT_PURE_HASH_BLOCK_V0)",
+      "vocab_search(term=EV_GENESIS_CREATED_V0)",
+      "vocab_search(term=IN_BOOTSTRAP_GENESIS_CHAIN_V0)",
+      "vocab_search(term=IN_COMMIT_BLOCK_V0)",
+      "vocab_search(term=RB_BOOTSTRAP_GENESIS_CHAIN_V0)",
+      "vocab_search(term=RB_COMMIT_BLOCK_V0)",
+      "vocab_search(term=STRUCTURE_CHAIN_STORAGE_V0)",
+      "vocab_search(term=WF_BOOTSTRAP_GENESIS_CHAIN_V0)",
+      "vocab_search(term=WF_COMMIT_BLOCK_V0)",
+      "artifact_source(ref=capability_side_effects::CS_MUTABLE_JSON_V0)",
+      "artifact_source(ref=capability_side_effects::CS_APPENDONLY_JSONL_V0)",
+      "artifact_source(ref=capability_side_effects::CS_MUTABLE_JSON_V0)",
+      "artifact_source(ref=capability_side_effects::CS_APPENDONLY_JSONL_V0)",
+      "artifact_source(ref=capability_side_effects::CS_MUTABLE_JSON_V0)",
+      "artifact_source(ref=capability_side_effects::CS_APPENDONLY_JSONL_V0)"
+    ],
+    "missing_evidence": [],
+    "unknowns": [],
+    "blocking": []
+  },
+  "human_engagement": null
+}

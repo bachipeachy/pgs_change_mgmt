@@ -1,0 +1,329 @@
+{
+  "belief_verification": [
+    {
+      "belief": "The current implementation does not yet provide a chain that commits proposed blocks.",
+      "result": "VERIFIED",
+      "evidence": "No capability or workflow commits a proposed block; concept COMMIT resolves to 0 artifacts. A block-committed event exists but nothing emits it: blockchain::EV_BLOCK_COMMITTED_V0.",
+      "source_finding": "S1 system_beliefs #1; projection absent[COMMIT]"
+    },
+    {
+      "belief": "A consensus loop already exists that proposes blocks and drives slot processing.",
+      "result": "VERIFIED",
+      "evidence": "blockchain::WF_RUN_CONSENSUS_LOOP_V0, blockchain::WF_RUN_CONSENSUS_SLOTS_V0, blockchain::WF_PROCESS_SLOT_V0",
+      "source_finding": "S1 system_beliefs #2"
+    },
+    {
+      "belief": "A block-proposal capability already exists.",
+      "result": "VERIFIED",
+      "evidence": "blockchain::WF_PROPOSE_BLOCK_V0, blockchain::CC_FORM_BLOCK_V0, blockchain::CC_INVOKE_BLOCK_PROPOSAL_V0, blockchain::EV_BLOCK_PROPOSED_V0",
+      "source_finding": "S1 system_beliefs #3"
+    },
+    {
+      "belief": "A validator registry already exists.",
+      "result": "VERIFIED",
+      "evidence": "blockchain::WF_REGISTER_VALIDATOR_V0, blockchain::CC_WRITE_VALIDATOR_RECORD_V0, blockchain::CC_QUERY_ELIGIBLE_VALIDATORS_V0, blockchain::CC_SELECT_PROPOSER_V0",
+      "source_finding": "S1 system_beliefs #4"
+    },
+    {
+      "belief": "A wallet capability already exists.",
+      "result": "VERIFIED",
+      "evidence": "blockchain::WF_CREATE_WALLET_V0, blockchain::CC_CREATE_WALLET_RECORD_V0, blockchain::ENTITY_WALLET_V0",
+      "source_finding": "S1 system_beliefs #5"
+    },
+    {
+      "belief": "A transaction capability already exists.",
+      "result": "VERIFIED",
+      "evidence": "blockchain::WF_SUBMIT_TRANSACTION_V0, blockchain::ENTITY_TRANSACTION_V0, blockchain::CC_SIGN_TRANSACTION_V0, blockchain::CC_HASH_TRANSACTION_V0",
+      "source_finding": "S1 system_beliefs #6"
+    },
+    {
+      "belief": "A mempool already exists.",
+      "result": "VERIFIED",
+      "evidence": "blockchain::CC_WRITE_MEMPOOL_TX_V0, blockchain::CC_QUERY_MEMPOOL_TXS_V0, blockchain::CC_DRAIN_MEMPOOL_V0, blockchain::CC_CLAIM_MEMPOOL_TXS_V0",
+      "source_finding": "S1 system_beliefs #7"
+    },
+    {
+      "belief": "An orchestration subdomain already exists.",
+      "result": "VERIFIED",
+      "evidence": "blockchain::WF_RUN_CHAIN_SIMULATION_V0, blockchain::CC_RUN_SLOT_SEQUENCE_V0, blockchain::STRUCTURE_BLOCKCHAIN_ORCHESTRATION_STORAGE_V0",
+      "source_finding": "S1 system_beliefs #8"
+    },
+    {
+      "belief": "Adjacent subdomains exist: identity, wallet, transaction, mempool, consensus, orchestration.",
+      "result": "VERIFIED",
+      "evidence": "identity via blockchain::ENTITY_ACTOR_V0; wallet via blockchain::ENTITY_WALLET_V0; transaction via blockchain::ENTITY_TRANSACTION_V0; mempool via blockchain::CC_WRITE_MEMPOOL_TX_V0; consensus via blockchain::WF_RUN_CONSENSUS_LOOP_V0; orchestration via blockchain::WF_RUN_CHAIN_SIMULATION_V0",
+      "source_finding": "S1 system_beliefs #9"
+    }
+  ],
+  "entities": [
+    {
+      "entity": "Chain",
+      "description": "The authoritative, ordered, append-only ledger of committed blocks; the canonical record other subdomains rely on.",
+      "store_model": "An append-only record holding every committed block in order, plus a pointer to the most recent committed block.",
+      "evidence_status": "NOT_FOUND",
+      "source_finding": "S1 requested_outcomes #1; projection absent[COMMIT] \u2014 no ledger exists yet"
+    },
+    {
+      "entity": "Block",
+      "description": "A unit of the ledger produced by a proposer; carries the transactions of its round and links to its predecessor once committed.",
+      "store_model": "Recorded as an element of the chain once committed; its content is hashed as its signature.",
+      "evidence_status": "VERIFIED",
+      "source_finding": "S1 business_vocabulary Block; blockchain::ENTITY_BLOCK_V0"
+    },
+    {
+      "entity": "Genesis Block",
+      "description": "The chain's first block; carries the first system transaction that mints the initial supply to the Genesis Actor.",
+      "store_model": "The single first element of the chain, created once at bootstrap.",
+      "evidence_status": "NOT_FOUND",
+      "source_finding": "S1 requested_outcomes #2; projection absent[GENESIS]"
+    },
+    {
+      "entity": "Genesis Actor",
+      "description": "The permanent actor that receives the initial minted supply at bootstrap and owns the mint wallet thereafter.",
+      "store_model": "An actor record; the owning identity of the initial supply.",
+      "evidence_status": "PARTIAL",
+      "source_finding": "S1 business_vocabulary Genesis Actor; actor records exist (blockchain::ENTITY_ACTOR_V0) but no genesis actor is provisioned"
+    }
+  ],
+  "entity_attributes": [
+    {
+      "entity": "Block",
+      "attribute": "content signature",
+      "meaning": "A hash of the block's content, computed at commit, that uniquely identifies the block.",
+      "evidence_status": "NOT_FOUND",
+      "source_finding": "S1 business_vocabulary Commit"
+    },
+    {
+      "entity": "Block",
+      "attribute": "predecessor link",
+      "meaning": "A reference to the single block that precedes this one on the canonical chain (absent only for genesis).",
+      "evidence_status": "NOT_FOUND",
+      "source_finding": "S1 business_invariants #5"
+    },
+    {
+      "entity": "Block",
+      "attribute": "contained transactions",
+      "meaning": "The transactions recorded by the block in its round; they become authoritative on commit.",
+      "evidence_status": "VERIFIED",
+      "source_finding": "S1 business_vocabulary Block; blockchain::ENTITY_BLOCK_V0"
+    },
+    {
+      "entity": "Chain",
+      "attribute": "head",
+      "meaning": "The most recently committed block, against which the next block's predecessor link is checked.",
+      "evidence_status": "NOT_FOUND",
+      "source_finding": "S1 business_invariants #5"
+    },
+    {
+      "entity": "Genesis Block",
+      "attribute": "initial mint transaction",
+      "meaning": "The first system transaction crediting the initial supply to the Genesis Actor.",
+      "evidence_status": "PARTIAL",
+      "source_finding": "S1 known_facts #3; minting exists (blockchain::WF_MINT_V0) but not as a genesis step"
+    }
+  ],
+  "business_processes": [
+    {
+      "process": "Commit a proposed block to the chain",
+      "initiator": "The consensus loop that produced the proposed block",
+      "outcome": "The block is hashed, linked to its predecessor, and recorded as canonical; the block and its transactions become authoritative and immutable.",
+      "evidence_status": "NOT_FOUND",
+      "source_finding": "S1 requested_outcomes #1; projection absent[COMMIT]"
+    },
+    {
+      "process": "Bootstrap the genesis chain",
+      "initiator": "The one-time system bootstrap, before the consensus loop runs",
+      "outcome": "A genesis block is created and the initial supply is minted to the Genesis Actor, establishing the chain and initial monetary state.",
+      "evidence_status": "NOT_FOUND",
+      "source_finding": "S1 requested_outcomes #2; projection absent[GENESIS], absent[BOOTSTRAP]"
+    },
+    {
+      "process": "Reconcile wallet balances after commit",
+      "initiator": "The chain, after a block is committed",
+      "outcome": "Wallet balances are recomputed from the committed transactions and made consistent with the canonical committed history; balances are derived, not owned as independent state.",
+      "evidence_status": "PARTIAL",
+      "source_finding": "S1 known_facts #11; S1 business_events Balance Reconciled; a balance-reconciled event exists (blockchain::EV_BALANCE_RECONCILED_V0)"
+    }
+  ],
+  "process_steps": [
+    {
+      "process": "Commit a proposed block to the chain",
+      "step": "1",
+      "action": "Check the proposed block's predecessor link matches the current chain head.",
+      "record_produced": "A pass/fail predecessor-link check.",
+      "evidence_status": "NOT_FOUND",
+      "source_finding": "S1 business_invariants #5"
+    },
+    {
+      "process": "Commit a proposed block to the chain",
+      "step": "2",
+      "action": "Hash the block's content to produce its canonical signature.",
+      "record_produced": "The block's content signature.",
+      "evidence_status": "NOT_FOUND",
+      "source_finding": "S1 business_vocabulary Commit"
+    },
+    {
+      "process": "Commit a proposed block to the chain",
+      "step": "3",
+      "action": "Append the signed block to the canonical record and advance the chain head.",
+      "record_produced": "A new committed block on the ledger and a block-committed event.",
+      "evidence_status": "PARTIAL",
+      "source_finding": "S1 business_events Block Committed; event exists (blockchain::EV_BLOCK_COMMITTED_V0), no producer"
+    },
+    {
+      "process": "Bootstrap the genesis chain",
+      "step": "1",
+      "action": "Create the genesis block containing the initial mint transaction.",
+      "record_produced": "The genesis block.",
+      "evidence_status": "NOT_FOUND",
+      "source_finding": "S1 known_facts #3"
+    },
+    {
+      "process": "Bootstrap the genesis chain",
+      "step": "2",
+      "action": "Mint the fixed initial supply to the Genesis Actor and record it as the first committed block.",
+      "record_produced": "The initial supply credited to the Genesis Actor; the chain established at height one.",
+      "evidence_status": "PARTIAL",
+      "source_finding": "S1 known_facts #4; minting exists (blockchain::WF_MINT_V0) but not as genesis"
+    },
+    {
+      "process": "Reconcile wallet balances after commit",
+      "step": "1",
+      "action": "After a block commits, recompute each affected wallet balance from the committed transactions and record the reconciled balance.",
+      "record_produced": "Reconciled wallet balances and a balance-reconciled event.",
+      "evidence_status": "PARTIAL",
+      "source_finding": "S1 known_facts #11; a balance-reconciled event exists (blockchain::EV_BALANCE_RECONCILED_V0)"
+    }
+  ],
+  "pps_baseline_fqdns": [
+    {
+      "capability": "Propose a block from the consensus loop",
+      "fqdn": "blockchain::WF_PROPOSE_BLOCK_V0",
+      "what_it_does": "Selects a proposer, drains the mempool, and forms a proposed block in a round.",
+      "fit": "PARTIAL",
+      "cannot_do": "Does not commit the proposed block to a canonical ledger."
+    },
+    {
+      "capability": "Block entity schema",
+      "fqdn": "blockchain::ENTITY_BLOCK_V0",
+      "what_it_does": "Defines the block record the chain commits.",
+      "fit": "EXACT",
+      "cannot_do": "Schema only; carries no commit or predecessor-link behaviour."
+    },
+    {
+      "capability": "Form a block from claimed mempool transactions",
+      "fqdn": "blockchain::CC_FORM_BLOCK_V0",
+      "what_it_does": "Assembles a proposed block from claimed transactions.",
+      "fit": "PARTIAL",
+      "cannot_do": "Produces a proposed block; does not record it as canonical."
+    },
+    {
+      "capability": "Block proposed event",
+      "fqdn": "blockchain::EV_BLOCK_PROPOSED_V0",
+      "what_it_does": "Marks that a candidate block exists.",
+      "fit": "EXACT",
+      "cannot_do": "Observation only; not the commit trigger."
+    },
+    {
+      "capability": "Block committed event",
+      "fqdn": "blockchain::EV_BLOCK_COMMITTED_V0",
+      "what_it_does": "Declares that a block became canonical.",
+      "fit": "PARTIAL",
+      "cannot_do": "Declared but unemitted \u2014 no capability produces it today."
+    },
+    {
+      "capability": "Mint supply",
+      "fqdn": "blockchain::WF_MINT_V0",
+      "what_it_does": "Mints value under a mint policy.",
+      "fit": "PARTIAL",
+      "cannot_do": "Not wired as a one-time genesis bootstrap step before the consensus loop."
+    },
+    {
+      "capability": "Consensus loop driver",
+      "fqdn": "blockchain::WF_RUN_CONSENSUS_LOOP_V0",
+      "what_it_does": "Drives slot processing and block proposal.",
+      "fit": "PARTIAL",
+      "cannot_do": "Produces proposals; has no downstream commit-to-chain step."
+    },
+    {
+      "capability": "Orchestration storage structure",
+      "fqdn": "blockchain::STRUCTURE_BLOCKCHAIN_ORCHESTRATION_STORAGE_V0",
+      "what_it_does": "Declares the orchestration subdomain's storage.",
+      "fit": "PARTIAL",
+      "cannot_do": "Does not declare a chain/ledger store."
+    }
+  ],
+  "gaps": [
+    {
+      "gap": "No capability commits a proposed block to a canonical chain.",
+      "severity": "HIGH",
+      "impact": "The core requested outcome \u2014 an authoritative ledger of committed blocks \u2014 cannot be met; proposed blocks have nowhere to become canonical.",
+      "evidence_status": "NOT_FOUND",
+      "source_finding": "S1 requested_outcomes #1; projection absent[COMMIT]"
+    },
+    {
+      "gap": "No canonical chain store exists to hold committed blocks and track the chain head.",
+      "severity": "HIGH",
+      "impact": "There is no durable, append-only record for committed history.",
+      "evidence_status": "NOT_FOUND",
+      "source_finding": "S1 known_facts #1"
+    },
+    {
+      "gap": "No genesis bootstrap capability creates the first block and mints the initial supply before consensus runs.",
+      "severity": "HIGH",
+      "impact": "The chain cannot be initialised with its fixed initial supply and Genesis Actor.",
+      "evidence_status": "NOT_FOUND",
+      "source_finding": "S1 requested_outcomes #2; projection absent[GENESIS], absent[BOOTSTRAP]"
+    },
+    {
+      "gap": "No predecessor-link validation guards commit, so nothing enforces one predecessor per committed block.",
+      "severity": "MEDIUM",
+      "impact": "Without it the immutability and single-predecessor invariants cannot be upheld at commit.",
+      "evidence_status": "NOT_FOUND",
+      "source_finding": "S1 business_invariants #5, #6"
+    }
+  ],
+  "architectural_observations": [
+    {
+      "observation": "The system already produces proposed blocks through a consensus loop but has no ledger to record them, so the chain plugs in directly downstream of proposal.",
+      "evidence": "blockchain::WF_PROPOSE_BLOCK_V0, blockchain::CC_FORM_BLOCK_V0",
+      "evidence_status": "VERIFIED",
+      "source_finding": "S1 system_beliefs #2, #3"
+    },
+    {
+      "observation": "A block-committed event is already declared but nothing emits it, indicating a commit path was anticipated in the design and left unbuilt.",
+      "evidence": "blockchain::EV_BLOCK_COMMITTED_V0",
+      "evidence_status": "VERIFIED",
+      "source_finding": "S1 business_events Block Committed"
+    },
+    {
+      "observation": "Minting already exists and can serve the genesis supply, so bootstrap reuses minting rather than introducing a new monetary mechanism.",
+      "evidence": "blockchain::WF_MINT_V0, blockchain::CC_VALIDATE_MINT_POLICY_V0",
+      "evidence_status": "VERIFIED",
+      "source_finding": "S1 known_facts #3, #5"
+    },
+    {
+      "observation": "Wallet balances are not chain-owned state; they are derived from committed transactions and reconciled on-chain after commit, and a balance-reconciled event already exists to carry that moment.",
+      "evidence": "blockchain::EV_BALANCE_RECONCILED_V0",
+      "evidence_status": "VERIFIED",
+      "source_finding": "S1 known_facts #11; S1 authority_boundaries Wallet Balance"
+    }
+  ],
+  "discovery_concerns": [
+    {
+      "concern": "The block-committed event exists with no producer, so its intended payload and emitter are unknown and must be settled when the commit path is designed.",
+      "evidence": "blockchain::EV_BLOCK_COMMITTED_V0",
+      "severity": "MEDIUM",
+      "evidence_status": "VERIFIED",
+      "source_finding": "S1 business_events Block Committed"
+    }
+  ],
+  "open_questions": [
+    {
+      "question": "What fields must the block-committed event carry to be useful to downstream subdomains?",
+      "category": "GOVERNANCE",
+      "why_it_matters": "The event already exists but is unemitted; its payload shapes how other subdomains observe committed history.",
+      "source_finding": "S1 business_events Block Committed"
+    }
+  ]
+}

@@ -59,19 +59,22 @@ work. `code` is copied verbatim from a Stage 6b register; `depends_on` lists pre
 <!-- register:build_order -->
 | Wave | Step | Code | Action (REPLACE, EXTEND, NEW) | Subdomain | Depends On |
 |------|------|------|-------------------------------|-----------|------------|
-| 1 | 1 | blockchain::STRUCTURE_BLOCKCHAIN_STORAGE_V0 | EXTEND | chain | - |
-| 1 | 2 | blockchain::CT_PURE_HASH_BLOCK_V0 | NEW | chain | - |
-| 1 | 3 | capability_transforms::CT_PURE_COMPARE_EQUAL_V0 | NEW | capability_transforms | - |
-| 1 | 4 | blockchain::EV_GENESIS_CREATED_V0 | NEW | chain | - |
-| 2 | 5 | blockchain::CC_VALIDATE_PREDECESSOR_LINK_V0 | NEW | chain | CT_PURE_COMPARE_EQUAL_V0 |
-| 2 | 6 | blockchain::CC_COMMIT_BLOCK_CANONICAL_V0 | NEW | chain | CT_PURE_HASH_BLOCK_V0 |
-| 2 | 7 | blockchain::CC_CREATE_GENESIS_BLOCK_V0 | NEW | chain | CT_PURE_HASH_BLOCK_V0 |
-| 3 | 8 | blockchain::IN_COMMIT_BLOCK_V0 | NEW | chain | - |
-| 3 | 9 | blockchain::IN_BOOTSTRAP_GENESIS_CHAIN_V0 | NEW | chain | - |
-| 4 | 10 | blockchain::WF_COMMIT_BLOCK_V0 | NEW | chain | IN_COMMIT_BLOCK_V0 |
-| 4 | 11 | blockchain::WF_BOOTSTRAP_GENESIS_CHAIN_V0 | NEW | chain | IN_BOOTSTRAP_GENESIS_CHAIN_V0 |
-| 5 | 12 | blockchain::RB_COMMIT_BLOCK_V0 | NEW | chain | WF_COMMIT_BLOCK_V0 |
-| 5 | 13 | blockchain::RB_BOOTSTRAP_GENESIS_CHAIN_V0 | NEW | chain | WF_BOOTSTRAP_GENESIS_CHAIN_V0 |
+| 1 | 1 | blockchain::CT_PURE_HASH_BLOCK_V0 | NEW | chain | capability_transforms::CT_PURE_KECCAK256_HASH_V0 |
+| 1 | 2 | blockchain::CT_PURE_EXTRACT_PREDECESSOR_HASH_V0 | NEW | chain | — |
+| 1 | 3 | blockchain::CT_PURE_DERIVE_BALANCES_V0 | NEW | chain | — |
+| 1 | 4 | capability_transforms::CT_PURE_COMPARE_EQUAL_V0 | NEW | capability_transforms | — |
+| 1 | 5 | blockchain::STRUCTURE_CHAIN_STORAGE_V0 | NEW | chain | capability_side_effects::CS_APPENDONLY_JSONL_V0, capability_side_effects::CS_MUTABLE_JSON_V0 |
+| 1 | 6 | blockchain::EV_GENESIS_CREATED_V0 | NEW | chain | — |
+| 1 | 7 | blockchain::IN_COMMIT_BLOCK_V0 | NEW | chain | — |
+| 1 | 8 | blockchain::IN_BOOTSTRAP_GENESIS_CHAIN_V0 | NEW | chain | — |
+| 2 | 9 | blockchain::CC_VALIDATE_PREDECESSOR_LINK_V0 | NEW | chain | blockchain::CT_PURE_EXTRACT_PREDECESSOR_HASH_V0, capability_transforms::CT_PURE_COMPARE_EQUAL_V0, blockchain::STRUCTURE_CHAIN_STORAGE_V0 |
+| 2 | 10 | blockchain::CC_COMMIT_BLOCK_CANONICAL_V0 | NEW | chain | blockchain::CT_PURE_HASH_BLOCK_V0, blockchain::STRUCTURE_CHAIN_STORAGE_V0 |
+| 2 | 11 | blockchain::CC_CREATE_GENESIS_BLOCK_V0 | NEW | chain | blockchain::CT_PURE_HASH_BLOCK_V0, blockchain::STRUCTURE_CHAIN_STORAGE_V0 |
+| 2 | 12 | blockchain::CC_RECONCILE_BALANCES_V0 | NEW | chain | blockchain::CT_PURE_DERIVE_BALANCES_V0, blockchain::STRUCTURE_CHAIN_STORAGE_V0 |
+| 3 | 13 | blockchain::WF_COMMIT_BLOCK_V0 | NEW | chain | blockchain::IN_COMMIT_BLOCK_V0, blockchain::CC_VALIDATE_PREDECESSOR_LINK_V0, blockchain::CC_COMMIT_BLOCK_CANONICAL_V0, blockchain::CC_RECONCILE_BALANCES_V0 |
+| 3 | 14 | blockchain::WF_BOOTSTRAP_GENESIS_CHAIN_V0 | NEW | chain | blockchain::IN_BOOTSTRAP_GENESIS_CHAIN_V0, blockchain::CC_CREATE_GENESIS_BLOCK_V0 |
+| 4 | 15 | blockchain::RB_COMMIT_BLOCK_V0 | NEW | chain | blockchain::WF_COMMIT_BLOCK_V0, blockchain::STRUCTURE_CHAIN_STORAGE_V0 |
+| 4 | 16 | blockchain::RB_BOOTSTRAP_GENESIS_CHAIN_V0 | NEW | chain | blockchain::WF_BOOTSTRAP_GENESIS_CHAIN_V0, blockchain::STRUCTURE_CHAIN_STORAGE_V0 |
 
 ---
 
@@ -83,7 +86,7 @@ critical path.*
 <!-- register:critical_path -->
 | Position | Code |
 |----------|------|
-| 1 | blockchain::IN_COMMIT_BLOCK_V0 |
+| 1 | blockchain::CT_PURE_HASH_BLOCK_V0 |
 | 2 | blockchain::CC_COMMIT_BLOCK_CANONICAL_V0 |
 | 3 | blockchain::WF_COMMIT_BLOCK_V0 |
 | 4 | blockchain::RB_COMMIT_BLOCK_V0 |
@@ -97,8 +100,7 @@ critical path.*
 <!-- register:mandate_artifact_summary -->
 | Action (REPLACE, EXTEND, NEW) | Count | Description |
 |-------------------------------|-------|-------------|
-| NEW | 12 | commit cluster (IN/WF/RB/CC/CC/CT) + genesis cluster (IN/WF/RB/CC/EV) + shared CT_PURE_COMPARE_EQUAL_V0 |
-| EXTEND | 1 | extend the canonical chain storage structure with commit semantics |
+| NEW | 16 | 15 new chain artifacts (2 IN, 2 WF, 4 CC, 3 CT, 1 EV, 1 STRUCTURE, 2 RB) + 1 shared capability transform |
 
 ---
 
@@ -109,29 +111,54 @@ critical path.*
 <!-- register:field_declarations -->
 | Code | Subdomain Field |
 |------|-----------------|
-| blockchain::IN_COMMIT_BLOCK_V0 | chain |
 | blockchain::WF_COMMIT_BLOCK_V0 | chain |
-| blockchain::RB_COMMIT_BLOCK_V0 | chain |
-| blockchain::CC_COMMIT_BLOCK_CANONICAL_V0 | chain |
-| blockchain::CC_VALIDATE_PREDECESSOR_LINK_V0 | chain |
-| blockchain::CT_PURE_HASH_BLOCK_V0 | chain |
-| blockchain::IN_BOOTSTRAP_GENESIS_CHAIN_V0 | chain |
 | blockchain::WF_BOOTSTRAP_GENESIS_CHAIN_V0 | chain |
-| blockchain::RB_BOOTSTRAP_GENESIS_CHAIN_V0 | chain |
+| blockchain::CC_VALIDATE_PREDECESSOR_LINK_V0 | chain |
+| blockchain::CC_COMMIT_BLOCK_CANONICAL_V0 | chain |
 | blockchain::CC_CREATE_GENESIS_BLOCK_V0 | chain |
+| blockchain::CC_RECONCILE_BALANCES_V0 | chain |
 | blockchain::EV_GENESIS_CREATED_V0 | chain |
-| blockchain::STRUCTURE_BLOCKCHAIN_STORAGE_V0 | chain |
+| blockchain::RB_COMMIT_BLOCK_V0 | chain |
+| blockchain::RB_BOOTSTRAP_GENESIS_CHAIN_V0 | chain |
 
 ---
 
-## 5. Cross-Subdomain Notes
+## 5. New Capabilities
+
+*New CT/capability declarations — **business intent only**. `Code` is a binding FQDN from a Stage 6b `new_artifacts` row; `Purpose` is business language; `Inputs`/`Outputs` are typed fields written `name:type` (comma-separated, e.g. `block:object`). The Construction Compiler realizes these into candidate CT contracts — it derives ALL protocol realization (purity, governing constitution, machine/implementation binding). You declare only intent. Nothing new → leave empty.*
+
+<!-- register:new_capabilities optional -->
+| Code | Purpose | Inputs | Outputs |
+|------|---------|--------|---------|
+| blockchain::CT_PURE_HASH_BLOCK_V0 | Compute a block's content signature by canonically hashing the block. | block:object | content_hash:string |
+| blockchain::CT_PURE_EXTRACT_PREDECESSOR_HASH_V0 | Extract the predecessor hash carried by a proposed block. | block:object | predecessor_hash:string |
+| blockchain::CT_PURE_DERIVE_BALANCES_V0 | Derive wallet balances from the committed transaction history. | committed_history:object | reconciled_balances:object |
+| capability_transforms::CT_PURE_COMPARE_EQUAL_V0 | Compare two values for equality. | left:string, right:string | is_equal:boolean |
+
+---
+
+## 6. New Intents
+
+*New IN (ingress) declarations — **business intent only**. `Code` is a binding FQDN from `new_artifacts`; `Purpose` is business language; `Workflow` is the WF this intent admits into (a design decision — the FQDN); `Inputs` is the typed payload written `name:type` (comma-separated — only what ARRIVES at the intent boundary). The Construction Compiler realizes these into candidate IN contracts. Nothing new → leave empty.*
+
+<!-- register:new_intents optional -->
+| Code | Purpose | Workflow | Inputs |
+|------|---------|----------|--------|
+| blockchain::IN_COMMIT_BLOCK_V0 | Admit a request to commit a proposed block to the canonical chain. | blockchain::WF_COMMIT_BLOCK_V0 | proposed_block:object |
+| blockchain::IN_BOOTSTRAP_GENESIS_CHAIN_V0 | Admit a request to bootstrap the genesis chain and initialise the supply. | blockchain::WF_BOOTSTRAP_GENESIS_CHAIN_V0 | genesis_block_content:object |
+
+---
+
+## 7. Cross-Subdomain Notes
 
 *Artifacts that make cross-subdomain calls (permitted) or would write cross-subdomain (forbidden — must be a peer-owned dependency-gap CC). Audit only.*
 
 <!-- register:cross_subdomain_notes optional -->
 | Code | Note |
 |------|------|
-| capability_transforms::CT_PURE_COMPARE_EQUAL_V0 | a shared generic comparison primitive authored in capability_transforms, not chain; the blockchain predecessor==head rule stays in CC_VALIDATE_PREDECESSOR_LINK_V0 |
+| blockchain::WF_COMMIT_BLOCK_V0 | Reads the proposed block produced by the consensus subdomain (blockchain::WF_PROPOSE_BLOCK_V0) — a cross-subdomain data read, permitted. |
+| blockchain::CC_RECONCILE_BALANCES_V0 | Announces reconciled balances via blockchain::EV_BALANCE_RECONCILED_V0 for the wallet subdomain to apply; the chain never writes the wallet store. |
+| capability_transforms::CT_PURE_COMPARE_EQUAL_V0 | A shared primitive authored in the capability_transforms namespace, not the chain subdomain. |
 
 ---
 

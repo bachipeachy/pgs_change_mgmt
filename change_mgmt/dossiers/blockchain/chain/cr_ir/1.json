@@ -1,0 +1,414 @@
+{
+  "cr_type": [
+    {
+      "classification": "NEW_SUBDOMAIN",
+      "rationale": "The canonical ledger ('chain') is a distinct concern from block proposal and needs its own governance boundary; it is not an extension of an existing subdomain.",
+      "source_finding": "CR seed \u00a71 CR Type"
+    }
+  ],
+  "business_vocabulary": [
+    {
+      "term": "Chain",
+      "definition": "The authoritative, ordered, append-only ledger of committed blocks (also called the canonical chain or canonical ledger).",
+      "source_finding": "CR seed \u00a72 Business Vocabulary"
+    },
+    {
+      "term": "Block",
+      "definition": "A unit of the ledger produced by a proposer and recorded on the chain; carries the transactions of its round.",
+      "source_finding": "CR seed \u00a72 Business Vocabulary"
+    },
+    {
+      "term": "Proposed Block",
+      "definition": "A block produced by a proposer in the consensus loop, not yet committed and not yet authoritative.",
+      "source_finding": "CR seed \u00a72 Business Vocabulary"
+    },
+    {
+      "term": "Commit",
+      "definition": "To make a proposed block part of the canonical chain: its content is hashed as its signature, it is linked to its predecessor, and it is recorded as canonical. Commit is irreversible; on commit the block and its contained transactions become immutable and authoritative.",
+      "source_finding": "CR seed \u00a72 Business Vocabulary"
+    },
+    {
+      "term": "Genesis Block",
+      "definition": "The chain's first block. It has the same form as any block and contains the first system transaction \u2014 a mint crediting the mint wallet \u2014 performed by the Genesis Actor.",
+      "source_finding": "CR seed \u00a72 Business Vocabulary"
+    },
+    {
+      "term": "Bootstrap",
+      "definition": "The one-time genesis sequence that establishes the initial chain and supply, before the consensus loop runs.",
+      "source_finding": "CR seed \u00a72 Business Vocabulary"
+    },
+    {
+      "term": "Genesis Actor",
+      "definition": "The special, permanent actor that receives the initial minted supply at bootstrap and owns the mint wallet thereafter.",
+      "source_finding": "CR seed \u00a72 Business Vocabulary"
+    },
+    {
+      "term": "Proposer",
+      "definition": "The validator selected to produce a block in a given round.",
+      "source_finding": "CR seed \u00a72 Business Vocabulary"
+    },
+    {
+      "term": "BachiCoin",
+      "definition": "The system's unit of value; the supply is a closed monetary system.",
+      "source_finding": "CR seed \u00a72 Business Vocabulary"
+    }
+  ],
+  "requested_outcomes": [
+    {
+      "outcome": "Establish a closed, canonical chain (ledger) that commits proposer-produced blocks to an authoritative, append-only record.",
+      "source_finding": "CR seed \u00a73 Requested Outcomes #1"
+    },
+    {
+      "outcome": "Bootstrap the chain from a genesis block that mints the initial supply to a Genesis Actor before the consensus loop runs.",
+      "source_finding": "CR seed \u00a73 Requested Outcomes #2"
+    },
+    {
+      "outcome": "For this increment, commit all proposed blocks directly to the chain, emulating the proof-of-stake model with attestation and finalization deferred to future iterations.",
+      "source_finding": "CR seed \u00a73 Requested Outcomes #3"
+    }
+  ],
+  "known_facts": [
+    {
+      "fact": "A canonical chain (ledger) is required as the authoritative record of committed blocks.",
+      "certainty": "HIGH",
+      "source_finding": "CR seed \u00a74 Known Facts #1"
+    },
+    {
+      "fact": "A genesis bootstrap is required, and must occur before consensus execution begins.",
+      "certainty": "HIGH",
+      "source_finding": "CR seed \u00a74 Known Facts #2"
+    },
+    {
+      "fact": "The genesis block shall mint an initial supply of 1,000,000 BachiCoin.",
+      "certainty": "HIGH",
+      "source_finding": "CR seed \u00a74 Known Facts #3"
+    },
+    {
+      "fact": "The initial supply shall be assigned to a Genesis Actor, which is permanent and owns the mint wallet.",
+      "certainty": "HIGH",
+      "source_finding": "CR seed \u00a74 Known Facts #4"
+    },
+    {
+      "fact": "Minting occurs only during genesis bootstrap; no minting and no burning occur in this release.",
+      "certainty": "HIGH",
+      "source_finding": "CR seed \u00a74 Known Facts #5"
+    },
+    {
+      "fact": "For this development increment, all proposer-produced blocks are committed to the chain.",
+      "certainty": "HIGH",
+      "source_finding": "CR seed \u00a74 Known Facts #6"
+    },
+    {
+      "fact": "Attestation and finalization are intentionally deferred to a future iteration.",
+      "certainty": "HIGH",
+      "source_finding": "CR seed \u00a74 Known Facts #7"
+    },
+    {
+      "fact": "Consensus proposes; the chain records and is the authoritative source of committed history.",
+      "certainty": "HIGH",
+      "source_finding": "CR seed \u00a74 Known Facts #8"
+    },
+    {
+      "fact": "In this release, the chain commits every proposed block without additional validation.",
+      "certainty": "HIGH",
+      "source_finding": "CR seed \u00a74 Known Facts #9"
+    },
+    {
+      "fact": "On commit, a block and its contained transactions become authoritative and immutable.",
+      "certainty": "HIGH",
+      "source_finding": "CR seed \u00a74 Known Facts #10"
+    },
+    {
+      "fact": "Wallet balances are derived from committed transactions and reconciled on the chain as a post-commit reconciliation process; the chain does not maintain independent balance state.",
+      "certainty": "HIGH",
+      "source_finding": "CR seed \u00a74 Known Facts #11 (human decision, S2 design review)"
+    }
+  ],
+  "system_beliefs": [
+    {
+      "belief": "The current implementation does not yet provide a chain that commits proposed blocks.",
+      "why_it_matters": "This CR exists to fill that gap; if a commit capability already exists, the CR scope changes.",
+      "verification_goal": "Confirm no existing capability commits proposed blocks to a ledger.",
+      "source_finding": "CR seed \u00a75 System Beliefs #1"
+    },
+    {
+      "belief": "A consensus loop already exists that proposes blocks and drives slot processing.",
+      "why_it_matters": "The chain commits exactly the blocks this loop proposes \u2014 its upstream producer.",
+      "verification_goal": "Identify the governing workflow(s), their producers, the records emitted, and the owning subdomain.",
+      "source_finding": "CR seed \u00a75 System Beliefs #2"
+    },
+    {
+      "belief": "A block-proposal capability already exists.",
+      "why_it_matters": "Defines the input the chain commit consumes.",
+      "verification_goal": "Identify the capability that produces a proposed block and the record/shape it emits.",
+      "source_finding": "CR seed \u00a75 System Beliefs #3"
+    },
+    {
+      "belief": "A validator registry already exists.",
+      "why_it_matters": "Validators feed proposer selection upstream of the chain.",
+      "verification_goal": "Identify where validators are registered and how proposer selection reads it.",
+      "source_finding": "CR seed \u00a75 System Beliefs #4"
+    },
+    {
+      "belief": "A wallet capability already exists.",
+      "why_it_matters": "Genesis mints the initial supply to the mint wallet held by the Genesis Actor.",
+      "verification_goal": "Identify the wallet capability and how a balance/mint is recorded.",
+      "source_finding": "CR seed \u00a75 System Beliefs #5"
+    },
+    {
+      "belief": "A transaction capability already exists.",
+      "why_it_matters": "Part of the pipeline actor to wallet to transaction to mempool.",
+      "verification_goal": "Identify the transaction capability and its place in that pipeline.",
+      "source_finding": "CR seed \u00a75 System Beliefs #6"
+    },
+    {
+      "belief": "A mempool already exists.",
+      "why_it_matters": "Transactions queue there before block formation.",
+      "verification_goal": "Identify the mempool store and how transactions queue before a block is formed.",
+      "source_finding": "CR seed \u00a75 System Beliefs #7"
+    },
+    {
+      "belief": "An orchestration subdomain already exists.",
+      "why_it_matters": "Drives slot processing and the consensus loop.",
+      "verification_goal": "Identify the orchestration/slot-processing driver and what it invokes.",
+      "source_finding": "CR seed \u00a75 System Beliefs #8"
+    },
+    {
+      "belief": "Adjacent subdomains exist: identity, wallet, transaction, mempool, consensus, orchestration.",
+      "why_it_matters": "Establishes the neighborhood the new chain subdomain plugs into.",
+      "verification_goal": "Confirm each named subdomain exists and note its owning boundary.",
+      "source_finding": "CR seed \u00a75 System Beliefs #9"
+    }
+  ],
+  "assumptions": [
+    {
+      "assumption": "All proposed blocks are good and are committed as finalized (no rejection path this increment).",
+      "basis": "Incremental-development decision; attestation and finalization deferred.",
+      "source_finding": "CR seed \u00a76 Assumptions"
+    }
+  ],
+  "constraints": [
+    {
+      "constraint": "Closed monetary system \u2014 no supply enters or leaves except by the system's own rules.",
+      "source": "Business policy",
+      "source_finding": "CR seed \u00a77 Constraints"
+    },
+    {
+      "constraint": "The chain is immutable \u2014 a committed block cannot be altered or removed.",
+      "source": "Business policy",
+      "source_finding": "CR seed \u00a77 Constraints"
+    },
+    {
+      "constraint": "Genesis supply is fixed at 1,000,000 BachiCoin, minted to the Genesis Actor at bootstrap.",
+      "source": "Business policy",
+      "source_finding": "CR seed \u00a77 Constraints"
+    }
+  ],
+  "business_invariants": [
+    {
+      "invariant": "Exactly one genesis block exists per chain.",
+      "source_finding": "CR seed \u00a78 Business Invariants #1"
+    },
+    {
+      "invariant": "Genesis executes exactly once at bootstrap and is never replayed.",
+      "source_finding": "CR seed \u00a78 Business Invariants #2"
+    },
+    {
+      "invariant": "Total supply is conserved and equals 1,000,000 BachiCoin (no minting or burning after genesis).",
+      "source_finding": "CR seed \u00a78 Business Invariants #3"
+    },
+    {
+      "invariant": "A committed block is immutable \u2014 it never changes or disappears.",
+      "source_finding": "CR seed \u00a78 Business Invariants #4"
+    },
+    {
+      "invariant": "Every committed block has exactly one predecessor, except the genesis block.",
+      "source_finding": "CR seed \u00a78 Business Invariants #5"
+    },
+    {
+      "invariant": "A block cannot be committed twice.",
+      "source_finding": "CR seed \u00a78 Business Invariants #6"
+    },
+    {
+      "invariant": "The canonical chain is the authoritative source of committed history; a proposed block is not authoritative until committed.",
+      "source_finding": "CR seed \u00a78 Business Invariants #7"
+    }
+  ],
+  "lifecycle_states": [
+    {
+      "object": "Chain",
+      "state": "Uninitialized",
+      "meaning": "No genesis block yet; the chain is not established.",
+      "source_finding": "CR seed \u00a79 Lifecycle States"
+    },
+    {
+      "object": "Chain",
+      "state": "Active",
+      "meaning": "Genesis created; the chain accepts and commits blocks.",
+      "source_finding": "CR seed \u00a79 Lifecycle States"
+    },
+    {
+      "object": "Block",
+      "state": "Proposed",
+      "meaning": "Produced by a proposer; not yet committed and not authoritative.",
+      "source_finding": "CR seed \u00a79 Lifecycle States"
+    },
+    {
+      "object": "Block",
+      "state": "Committed",
+      "meaning": "Recorded in the canonical chain; immutable and authoritative.",
+      "source_finding": "CR seed \u00a79 Lifecycle States"
+    },
+    {
+      "object": "Genesis Block",
+      "state": "Created Once",
+      "meaning": "The single first block, established at bootstrap; permanent.",
+      "source_finding": "CR seed \u00a79 Lifecycle States"
+    }
+  ],
+  "business_events": [
+    {
+      "event": "Genesis Created",
+      "when_it_occurs": "Once, at bootstrap, before the consensus loop runs.",
+      "significance": "Establishes the chain and the initial monetary state.",
+      "source_finding": "CR seed \u00a710 Business Events"
+    },
+    {
+      "event": "Block Proposed",
+      "when_it_occurs": "When a proposer produces a block in a round.",
+      "significance": "A candidate block exists; not yet authoritative.",
+      "source_finding": "CR seed \u00a710 Business Events"
+    },
+    {
+      "event": "Block Committed",
+      "when_it_occurs": "When a proposed block is committed to the canonical chain.",
+      "significance": "The block and its contained transactions become authoritative and immutable.",
+      "source_finding": "CR seed \u00a710 Business Events"
+    },
+    {
+      "event": "Balance Reconciled",
+      "when_it_occurs": "After a block is committed, when wallet balances are recomputed from the committed transactions.",
+      "significance": "Wallet balances become consistent with the canonical committed history.",
+      "source_finding": "CR seed \u00a710 Business Events (human decision, S2 design review)"
+    }
+  ],
+  "authority_boundaries": [
+    {
+      "business_object": "Proposed Block",
+      "authoritative_owner": "Consensus",
+      "source_finding": "CR seed \u00a711 Authority Boundaries"
+    },
+    {
+      "business_object": "Committed Block",
+      "authoritative_owner": "Chain",
+      "source_finding": "CR seed \u00a711 Authority Boundaries"
+    },
+    {
+      "business_object": "Committed History",
+      "authoritative_owner": "Chain",
+      "source_finding": "CR seed \u00a711 Authority Boundaries"
+    },
+    {
+      "business_object": "Monetary Supply",
+      "authoritative_owner": "Genesis at bootstrap, then Chain",
+      "source_finding": "CR seed \u00a711 Authority Boundaries"
+    },
+    {
+      "business_object": "Wallet Balance",
+      "authoritative_owner": "Chain (derived by post-commit reconciliation from committed transactions, not owned as independent state)",
+      "source_finding": "CR seed \u00a711 Authority Boundaries (human decision, S2 design review)"
+    }
+  ],
+  "out_of_scope": [
+    {
+      "item": "The attest step of the proof-of-stake progression.",
+      "reason": "Deferred to a future iteration; all proposed blocks treated as good this increment.",
+      "source_finding": "CR seed \u00a712 Out of Scope"
+    },
+    {
+      "item": "The finalize step of the proof-of-stake progression.",
+      "reason": "Deferred to a future iteration; proposed blocks committed directly.",
+      "source_finding": "CR seed \u00a712 Out of Scope"
+    },
+    {
+      "item": "Fork resolution.",
+      "reason": "Not part of this release; the chain commits every proposed block.",
+      "source_finding": "CR seed \u00a712 Out of Scope"
+    },
+    {
+      "item": "Chain reorganization (reorg).",
+      "reason": "Not part of this release; committed history is immutable.",
+      "source_finding": "CR seed \u00a712 Out of Scope"
+    },
+    {
+      "item": "Slashing.",
+      "reason": "Validator penalties are out of scope this release.",
+      "source_finding": "CR seed \u00a712 Out of Scope"
+    },
+    {
+      "item": "Rewards.",
+      "reason": "Validator/proposer rewards are out of scope this release.",
+      "source_finding": "CR seed \u00a712 Out of Scope"
+    }
+  ],
+  "governance_scope": [
+    {
+      "scope_item": "chain",
+      "relationship": "CREATED",
+      "source_finding": "CR seed \u00a713 Governance Scope"
+    },
+    {
+      "scope_item": "consensus_pos",
+      "relationship": "ADJACENT",
+      "source_finding": "CR seed \u00a713 Governance Scope"
+    },
+    {
+      "scope_item": "orchestration",
+      "relationship": "ADJACENT",
+      "source_finding": "CR seed \u00a713 Governance Scope"
+    },
+    {
+      "scope_item": "wallet",
+      "relationship": "ADJACENT",
+      "source_finding": "CR seed \u00a713 Governance Scope"
+    },
+    {
+      "scope_item": "transaction",
+      "relationship": "ADJACENT",
+      "source_finding": "CR seed \u00a713 Governance Scope"
+    },
+    {
+      "scope_item": "mempool",
+      "relationship": "ADJACENT",
+      "source_finding": "CR seed \u00a713 Governance Scope"
+    },
+    {
+      "scope_item": "identity",
+      "relationship": "ADJACENT",
+      "source_finding": "CR seed \u00a713 Governance Scope"
+    }
+  ],
+  "clarification_requests": [],
+  "acceptance_criteria": [
+    {
+      "criterion": "The chain begins with a genesis block that records the assignment of the initial 1,000,000 BachiCoin supply to the Genesis Actor.",
+      "source_finding": "CR seed \u00a715 Acceptance Criteria #1"
+    },
+    {
+      "criterion": "Blocks accepted by the chain appear in the authoritative ledger in proposal order.",
+      "source_finding": "CR seed \u00a715 Acceptance Criteria #2"
+    },
+    {
+      "criterion": "A block recorded in the ledger never changes or disappears.",
+      "source_finding": "CR seed \u00a715 Acceptance Criteria #3"
+    },
+    {
+      "criterion": "The total recorded supply on the ledger is 1,000,000 BachiCoin, held initially by the Genesis Actor.",
+      "source_finding": "CR seed \u00a715 Acceptance Criteria #4"
+    },
+    {
+      "criterion": "Once committed, a block and its contained transactions are treated as authoritative.",
+      "source_finding": "CR seed \u00a715 Acceptance Criteria #5"
+    }
+  ]
+}

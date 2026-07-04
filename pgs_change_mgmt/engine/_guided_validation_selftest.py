@@ -22,7 +22,7 @@ PASS, FAIL = "✅", "❌"
 CHAIN = Path(__file__).resolve().parents[2] / "change_mgmt" / "dossiers" / "blockchain" / "chain"
 PKG = CHAIN / "_packages" / "stage_2"
 DOC = CHAIN / "2_domain_model_blockchain_chain_v0.md"
-HANDOFF = CHAIN / "_handoff" / "1.json"
+HANDOFF = CHAIN / "cr_ir" / "1.json"
 
 
 def _check(cond: bool, label: str) -> bool:

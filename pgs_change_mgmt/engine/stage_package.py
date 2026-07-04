@@ -314,6 +314,36 @@ def build_register_contract(stage: str, template: str) -> tuple[dict[str, Any], 
     return schema, register_contract
 
 
+# DRC Part B — the OPTIONAL `human_engagement` register the worker MAY add to any stage to surface
+# genuine design questions for the human. Advertised on EVERY stage (both transports). It is diagnostic
+# only: never enters the handoff, never affects a gate or the stage's readiness. Its questions-only
+# boundary is enforced by design_review.validate_human_engagement.
+_PART_B_ADVISORY = """
+## Design Review — Part B (optional · diagnostic · never stage content)
+
+Inside `registers` you MAY add ONE extra key, `human_engagement`, to raise design decisions that
+protocol inspection (`pi`) and governance genuinely CANNOT answer — business policy, preference, or an
+ambiguous requirement only a human can settle. It never enters the handoff and never changes any gate
+or the stage's readiness.
+
+- `human_engagement` (optional) — a list of rows, columns: question, why, tradeoffs
+- Questions ONLY. Do NOT state confidence, readiness, a percentage, or any self-evaluation
+  (`READY_FOR_NEXT_STAGE` / "I am confident" / "80%") — those are engine-certified facts (Part A),
+  and a Part-B row that asserts them is rejected.
+- Omit the register entirely when you have no genuine human decision to raise (never fabricate one).
+
+```json
+{
+  "registers": {
+    "human_engagement": [
+      {"question": "…a decision only a human can make…", "why": "…why PI/governance cannot answer it…", "tradeoffs": "…the options and their costs…"}
+    ]
+  }
+}
+```
+"""
+
+
 def _expected_output_md(schema: dict[str, Any]) -> str:
     """A worked example of the ```json registers block the response must carry."""
     if schema.get("structured"):
@@ -333,7 +363,7 @@ def _expected_output_md(schema: dict[str, Any]) -> str:
                 lines.append(f"    - `{col}` ∈ {{{', '.join(allowed)}}}")
         worked = json.dumps({"registers": example}, indent=2)
         lines += ["", "## Worked skeleton", "```json", worked, "```"]
-        return "\n".join(lines) + "\n"
+        return "\n".join(lines) + "\n" + _PART_B_ADVISORY
     # free-form: a registers envelope keyed by emit field
     example = {f["field"]: None for f in schema["emit_fields"]}
     lines = ["# Expected output", "",
@@ -345,7 +375,7 @@ def _expected_output_md(schema: dict[str, Any]) -> str:
         lines.append(f"- `{f['field']}`{tag} — {f['justification']}")
     worked = json.dumps({"registers": example}, indent=2)
     lines += ["", "## Worked skeleton", "```json", worked, "```"]
-    return "\n".join(lines) + "\n"
+    return "\n".join(lines) + "\n" + _PART_B_ADVISORY
 
 
 # ---- the builder ----------------------------------------------------------------------------

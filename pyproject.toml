@@ -9,5 +9,10 @@ description = "PGS Change Management Engine — the governance projection engine
 requires-python = ">=3.11"
 dependencies = ["pyyaml"]
 
+[project.scripts]
+# The Construction Compiler CLI — deterministic S8→artifact compilation (no agent). `python -m` works
+# today; this console entry activates on the next editable reinstall (bootstrap).
+pgs_construct = "pgs_change_mgmt.engine.construction_cli:main"
+
 [tool.setuptools.packages.find]
 include = ["pgs_change_mgmt*"]

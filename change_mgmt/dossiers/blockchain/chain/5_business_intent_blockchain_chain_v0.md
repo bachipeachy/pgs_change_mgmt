@@ -68,10 +68,14 @@ The Chain subdomain maintains the official blockchain ledger. It records every b
 <!-- register:scope_boundary business_language=capability,notes -->
 | Capability | Status (IN_SCOPE, DEFERRED) | Notes | Source Finding |
 |------------|-----------------------------|-------|----------------|
-| commit a proposed block to the canonical chain | IN_SCOPE | the core capability this CR delivers | S4-GAP-1 |
-| bootstrap genesis and mint the initial supply once | IN_SCOPE | one-time startup; reuses the existing mint policy | S4-GAP-2 |
-| the canonical ledger store for committed blocks | IN_SCOPE | the store the chain owns | S4-GAP-3 |
-| attestation and finalization of committed blocks | DEFERRED | excluded by the CR; every committed block is treated as good this increment | S4-design-3 |
+| Commit a proposed block to the canonical chain | IN_SCOPE | the core outcome — proposed blocks become canonical | S4 capability_graph GAP-1 |
+| Store the canonical chain ledger and track its head | IN_SCOPE | append-only record of committed blocks | S4 capability_graph GAP-2 |
+| Bootstrap the genesis chain and initialise the supply | IN_SCOPE | one-time, before the consensus loop runs | S4 capability_graph GAP-5 |
+| Reconcile wallet balances after commit | IN_SCOPE | balances derived from committed transactions | S4 capability_graph GAP-6 |
+| Attest proposed blocks | DEFERRED | deferred to a future increment | S1 out_of_scope attest |
+| Finalize committed blocks | DEFERRED | deferred; blocks committed directly | S1 out_of_scope finalize |
+| Resolve forks and chain reorganizations | DEFERRED | not this release; committed history is immutable | S1 out_of_scope fork/reorg |
+| Slash or reward validators | DEFERRED | validator penalties/rewards out of scope | S1 out_of_scope slashing/rewards |
 
 ---
 
@@ -82,7 +86,7 @@ The Chain subdomain maintains the official blockchain ledger. It records every b
 <!-- register:business_objects optional business_language=store_name,business_rationale -->
 | Store Name | Record Model (MUTABLE_STATE, APPEND_ONLY_JOURNAL, IDENTITY_REGISTRY, HYBRID) | Business Rationale | Source Finding |
 |------------|------------------------------------------------------------------------------|--------------------|----------------|
-| canonical chain ledger | APPEND_ONLY_JOURNAL | committed history is permanent and ordered; blocks are appended and never rewritten | S4-entity-canonical-chain |
+| The canonical chain ledger | APPEND_ONLY_JOURNAL | Committed history is immutable and ordered; blocks are appended and never altered or removed, so the record is an append-only journal. | S4 constraint_register #2, #6; S1 business_invariants #4, #5 |
 
 ---
 
@@ -96,7 +100,7 @@ declare it `UNRESOLVED` (a governed hole a human will resolve) rather than guess
 <!-- register:identity_semantics business_language=identity_field,source,uniqueness_rule,cross_subdomain_relationship -->
 | Store Name | Identity Field | Source | Uniqueness Rule | Cross-Subdomain Relationship | Source Finding |
 |------------|----------------|--------|-----------------|------------------------------|----------------|
-| canonical chain ledger | block height | assigned at commit as the next position after the current head | exactly one committed block per height; the genesis block is height zero | commits the proposed block produced upstream in consensus_pos | S4-entity-committed-block |
+| The canonical chain ledger | The block's content signature | Computed by hashing the committed block's content at commit | Each committed block has a unique content signature; a block cannot be committed twice | The block originates as a proposed block produced by the consensus subdomain | S1 business_vocabulary Commit; S1 business_invariants #6 |
 
 ---
 
@@ -107,10 +111,13 @@ declare it `UNRESOLVED` (a governed hole a human will resolve) rather than guess
 <!-- register:invariants business_language=invariant,business_reason -->
 | Invariant | Business Reason | Source Finding |
 |-----------|-----------------|----------------|
-| the canonical chain is append-only and immutable | committed history is the source of truth; rewriting it would destroy the trust the ledger exists to provide | S4-constraint-1 |
-| the monetary supply is closed and minted exactly once at genesis | a fixed supply is a monetary guarantee; a second minting path would break it | S4-constraint-2 |
-| a block is committed at exactly one height, contiguous with the head | gaps or forks in height would make the ledger ambiguous about which history is canonical | S4-entity-committed-block |
-| the committed-block signal is emitted once per committed block | downstream consumers need a single unambiguous signal that a block became permanent | S4-constraint-3 |
+| A committed block is immutable — it never changes or disappears. | Committed history must be a permanent, reliable record other subdomains can trust. | S1 business_invariants #4 |
+| Every committed block has exactly one predecessor, except the genesis block. | The chain is a single, ordered history with one origin. | S1 business_invariants #5 |
+| A block cannot be committed twice. | Prevents duplication or replay of committed history. | S1 business_invariants #6 |
+| Exactly one genesis block exists per chain, and genesis executes exactly once. | The chain has a single, permanent origin and initial state. | S1 business_invariants #1, #2 |
+| Total supply is conserved at 1,000,000 BachiCoin after genesis. | The monetary system is closed — no supply enters or leaves except by the system's rules. | S1 business_invariants #3 |
+| A proposed block is not authoritative until committed. | The chain is the sole authority for committed history. | S1 business_invariants #7 |
+| Wallet balances are derived from committed transactions, not owned by the chain as independent state. | Balances must always be consistent with the canonical committed history. | S1 known_facts #11 (human decision) |
 
 ---
 
@@ -121,10 +128,10 @@ declare it `UNRESOLVED` (a governed hole a human will resolve) rather than guess
 <!-- register:actions business_language=object,trigger -->
 | Action | Object | Trigger | Status (IN_SCOPE, DEFERRED) | Source Finding |
 |--------|--------|---------|-----------------------------|----------------|
-| commit | proposed block | a consensus round closes and yields a proposed block | IN_SCOPE | S4-cap-commit |
-| bootstrap | genesis block | the chain is initialized for the first time | IN_SCOPE | S4-cap-genesis |
-| mint | initial supply | genesis bootstrap runs, once | IN_SCOPE | blockchain::WF_MINT_V0 |
-| attest | committed block | deferred — no finalization gate this increment | DEFERRED | S4-design-3 |
+| Commit | a proposed block | the consensus loop produces a proposed block | IN_SCOPE | S4 relationships Chain commits Proposed Block |
+| Bootstrap | the genesis chain | system initialisation, once, before the consensus loop runs | IN_SCOPE | S4 relationships Bootstrap creates Genesis Block |
+| Attest | a proposed block | deferred this increment | DEFERRED | S1 out_of_scope attest |
+| Finalize | a committed block | deferred this increment | DEFERRED | S1 out_of_scope finalize |
 
 ---
 
@@ -135,12 +142,14 @@ declare it `UNRESOLVED` (a governed hole a human will resolve) rather than guess
 <!-- register:provisional_codes business_language=summary -->
 | Provisional Code | Family (AC, IN, WF, CC) | Summary | Source Finding |
 |------------------|-------------------------|---------|----------------|
-| IN_COMMIT_BLOCK | IN | admit a request to commit a proposed block to the chain | S4-cap-commit |
-| WF_COMMIT_BLOCK | WF | the topology that commits a proposed block and emits the committed signal | S4-cap-commit |
-| CC_APPEND_BLOCK | CC | append a committed block to the canonical ledger at the next height | S4-GAP-1 |
-| WF_BOOTSTRAP_GENESIS | WF | the one-time topology that writes the genesis block and mints the initial supply | S4-cap-genesis |
-| CC_WRITE_GENESIS_BLOCK | CC | write the genesis block at height zero | S4-GAP-2 |
-| AC_CHAIN | AC | the authority context under which the chain commits blocks to its ledger | S4-actor-chain |
+| IN_COMMIT_BLOCK_V0 | IN | Admit a request to commit a proposed block to the canonical chain. | S5 actions Commit |
+| WF_COMMIT_BLOCK_V0 | WF | Commit a proposed block: validate its predecessor link, sign it, record it as canonical, and reconcile balances. | S5 actions Commit |
+| IN_BOOTSTRAP_GENESIS_CHAIN_V0 | IN | Admit a request to bootstrap the genesis chain and initialise the supply. | S5 actions Bootstrap |
+| WF_BOOTSTRAP_GENESIS_CHAIN_V0 | WF | Bootstrap the genesis chain: create the genesis block and initialise the fixed supply before consensus runs. | S5 actions Bootstrap |
+| CC_COMMIT_BLOCK_CANONICAL_V0 | CC | Record a validated, signed proposed block as canonical on the chain and announce it committed. | S4 gap_register GAP-1 |
+| CC_VALIDATE_PREDECESSOR_LINK_V0 | CC | Check that a proposed block's predecessor link matches the current chain head before commit. | S4 gap_register GAP-3 |
+| CC_CREATE_GENESIS_BLOCK_V0 | CC | Create the genesis block containing the initial mint and record it as the first committed block. | S4 gap_register GAP-5 |
+| CC_RECONCILE_BALANCES_V0 | CC | Reconcile wallet balances from the committed transactions after a block commits. | S4 gap_register GAP-6 |
 
 ---
 
@@ -151,8 +160,7 @@ declare it `UNRESOLVED` (a governed hole a human will resolve) rather than guess
 <!-- register:cross_subdomain_refs optional business_language=role -->
 | CC Code | Defined In | Role | Source Finding |
 |---------|------------|------|----------------|
-| CC_FORM_BLOCK | consensus_pos | forms the proposed block that the chain commits | blockchain::CC_FORM_BLOCK_V0 |
-| EV_BLOCK_COMMITTED | consensus_pos | the committed-block signal WF_COMMIT_BLOCK emits | blockchain::EV_BLOCK_COMMITTED_V0 |
+| NONE IDENTIFIED |  |  |  |
 
 ---
 

@@ -1,0 +1,200 @@
+"""Compilation Unit — the Construction Compiler ↔ Protocol Compiler contract, as a **virtual federation
+workspace**.
+
+A Compilation Unit packages a **canonical view** of every involved repository with a **candidate
+overlay**, and lets `pgs_compiler` answer *"can the Protocol Compiler consume what the Construction
+Compiler emitted?"* → PASS / FAIL — **with no repository mutation** (`SINGLE_COMPILATION_CONTEXT`).
+
+Two conceptually distinct phases (kept separate for testability):
+  1. **Ownership Resolution** — *where does each artifact belong?* → `ownership.resolve` (governed).
+  2. **Federation Assembly** — *build the virtual workspace* → `assemble` (mount = copy today; overlay
+     filesystem / symlink tree / in-memory mount tomorrow, without changing Compilation Unit semantics).
+
+There is **no promotion here.** Admission is purely observational: it ends at an Admission Manifest and
+STOPs. Promotion (`copy_if_green` into canonical repos + snapshot rebuild + S9) is a separate concern
+that runs *only after* a PASS, and can consume the manifest rather than rediscovering ownership.
+"""
+from __future__ import annotations
+
+import os
+import shutil
+import subprocess
+import tempfile
+from dataclasses import dataclass, field
+from pathlib import Path
+
+from pgs_governance.implementation.artifact_kinds import REGISTRY   # kind → registry sub-dir (single source)
+
+import re
+
+from . import ownership
+from . import governance_surface
+
+# Responsible-Phase triage map for admission assertions. This is a *diagnostic aid* for the Admission
+# Report (which phase owns a failure) — NOT governance logic and NOT consulted during construction; the
+# Construction Compiler never becomes aware of governance rules. Four outcomes: PAS renderer enhancement,
+# Projection/Contract enhancement, Governance surface expansion, or (rare) a Compiler bug.
+RESPONSIBLE_PHASE: dict[str, str] = {
+    "ASSERT_SCHEMA_CONFORMANCE": "PAS Renderer",
+    "ASSERT_TOPOLOGY_INPUT_REFERENCE_DECLARED": "PAS Renderer",
+    "ASSERT_CT_SURFACE_CLOSED": "Governance surface",
+    "ASSERT_CS_SURFACE_CLOSED": "Governance surface",
+    "ASSERT_CC_STORAGE_OP_CONFORMANCE": "Contract / Projection",
+}
+
+
+def _phase_for(assertion: str) -> str:
+    key = re.sub(r"(_BLOCKCHAIN)?_V\d+$", "", assertion)      # strip domain suffix + version
+    return RESPONSIBLE_PHASE.get(key, "Protocol Compiler / unclassified")
+
+
+@dataclass
+class Mount:
+    """One repository in the federation: its canonical source and its mounted view (canonical+overlay)."""
+    repo: str
+    canonical: Path
+    view: Path
+
+
+@dataclass
+class Placement:
+    fqdn: str
+    code: str
+    kind: str
+    owner_layer: str
+    repo: str
+    overlay: str            # path of the candidate within the mount, relative to the registry
+
+
+@dataclass
+class CompilationUnit:
+    domain: str
+    subdomain: str
+    root: Path
+    mounts: dict[str, Mount] = field(default_factory=dict)
+    placements: list[Placement] = field(default_factory=list)
+
+    @property
+    def pythonpath(self) -> str:
+        # every mounted package is copied to root/<package>; a single entry (root) imports them all —
+        # shadowing the editable installs — while unmounted repos still resolve from site-packages.
+        # This is layout-agnostic: it works for doubly-nested domain repos and the singly-nested,
+        # namespace-package governance repo alike (the package dir is what gets mounted, not the repo).
+        return str(self.root)
+
+
+@dataclass
+class Assertion:
+    name: str
+    stage: str
+    count: int
+    phase: str          # Responsible Phase — which phase owns the fix
+
+
+@dataclass
+class Admission:
+    unit: CompilationUnit
+    ok: bool
+    output: str
+    per_artifact: dict[str, str] = field(default_factory=dict)   # fqdn → outcome
+    assertions: list["Assertion"] = field(default_factory=list)  # structured failures (Responsible Phase)
+
+    def manifest(self, *, structure: str = "") -> str:
+        u = self.unit
+        L = ["Compilation Unit — Admission Manifest", "=" * 42,
+             f"Domain: {u.domain}    Subdomain: {u.subdomain}    Compiler: pgs_compiler"
+             + (f" · {structure}" if structure else ""),
+             f"Federation mounts ({len(u.mounts)}): "
+             + ", ".join(f"{m.repo} (canonical→view)" for m in u.mounts.values()),
+             "",
+             f"  {'artifact':32s} {'kind':4s} {'owner layer':20s} {'repo':16s} outcome"]
+        for p in u.placements:
+            L.append(f"  {p.code:32s} {p.kind:4s} {p.owner_layer:20s} {p.repo:16s} "
+                     f"{self.per_artifact.get(p.fqdn, '—')}")
+        if self.assertions:
+            L += ["", "Admission failures (by Responsible Phase):",
+                  f"  {'assertion':44s} {'stage':14s} {'n':>3s}  responsible phase"]
+            for a in self.assertions:
+                L.append(f"  {a.name:44s} {a.stage:14s} {a.count:>3d}  {a.phase}")
+        L += ["", f"Result: {'PASS — admitted' if self.ok else 'FAIL — rejected'}"]
+        return "\n".join(L)
+
+
+# --- Phase 2: Federation Assembly -------------------------------------------------------------------
+
+_IGNORE = shutil.ignore_patterns(".git", "__pycache__", "*.pyc", ".venv", ".idea")
+
+
+def _mount_package(unit: CompilationUnit, package_dir: Path) -> Mount:
+    """Mount an importable package once as a read-only copy under `root/<package>`. Mounting the
+    *package* (not the repo) is layout-agnostic: `root/<package>` is importable via PYTHONPATH=root
+    regardless of whether the canonical repo nests the package one or two levels deep."""
+    name = package_dir.name
+    if name not in unit.mounts:
+        view = unit.root / name
+        shutil.copytree(package_dir, view, ignore=_IGNORE)
+        unit.mounts[name] = Mount(name, package_dir, view)
+    return unit.mounts[name]
+
+
+def assemble(artifacts: dict[str, str], *, domain: str, subdomain: str) -> CompilationUnit:
+    """Build the virtual federation workspace: for each candidate, resolve its owner (Phase 1), mount
+    that owner *package* once (copy), and overlay the candidate at its registry location. The
+    construction `subdomain` applies only to artifacts owned by the domain under construction; reusable
+    capabilities place at `registry/<kind_dir>/` per their own layer's layout.
+
+    Candidate governance-surface overlays (declaring new CTs legal) are applied last, onto the same
+    read-only copies — so a construction's new opcodes are admitted *inside the unit*, never in the
+    canonical governance registry (`governance_surface`)."""
+    root = Path(tempfile.mkdtemp(prefix="compilation_unit_"))
+    unit = CompilationUnit(domain=domain, subdomain=subdomain, root=root)
+    for fqdn, md in artifacts.items():
+        owner = ownership.resolve(fqdn)                                    # Phase 1: Ownership Resolution
+        m = _mount_package(unit, owner.repo_root / owner.package)          # mount the importable package
+        code = fqdn.split("::")[-1]
+        kind_dir = REGISTRY.directory(code.split("_", 1)[0])
+        sub = subdomain if owner.namespace == domain else None            # subdomain only for constructed domain
+        rel = (Path(sub) if sub else Path()) / kind_dir / f"{code}.md"
+        dest = m.view / "registry" / rel
+        dest.parent.mkdir(parents=True, exist_ok=True)
+        dest.write_text(md)
+        unit.placements.append(Placement(fqdn, code, code.split("_", 1)[0],
+                                         owner.layer, m.repo, str(rel)))
+    for ov in governance_surface.surface_overlays([f for f in artifacts if governance_surface.is_ct(f)]):
+        m = _mount_package(unit, ov.package_dir)                          # surface's owner (may be pgs_governance)
+        surf = m.view / ov.rel
+        surf.write_text(governance_surface.compose(surf.read_text(), ov.entries))
+    return unit
+
+
+# --- Phase 3: Protocol Compiler invocation (diagnostics only, no mutation) --------------------------
+
+def _parse_assertions(output: str) -> list[Assertion]:
+    stage = ""
+    m = re.search(r"failed at (S\d+_\w+)", output) or re.search(r"(S\d+_\w+) failed with", output)
+    if m:
+        stage = m.group(1)
+    seen: dict[str, int] = {}
+    for am in re.finditer(r"(ASSERT_[A-Z0-9_]+_V\d+)\s+[—-]+\s+(\d+)\s+violation", output):
+        seen[am.group(1)] = int(am.group(2))
+    return [Assertion(name=n, stage=stage, count=c, phase=_phase_for(n)) for n, c in seen.items()]
+
+
+def compile_unit(unit: CompilationUnit, *, structure: str, timeout: float = 300.0) -> Admission:
+    try:
+        env = dict(os.environ, PYTHONPATH=unit.pythonpath)      # candidate views shadow the editable installs
+        r = subprocess.run(["python", "-m", "pgs_compiler.cli", "compile", "--structure", structure],
+                           capture_output=True, text=True, env=env, timeout=timeout)
+        ok = r.returncode == 0
+        out = r.stdout + r.stderr
+        per = {p.fqdn: ("ADMITTED" if ok else ("REJECTED" if p.code in out else "—")) for p in unit.placements}
+        return Admission(unit=unit, ok=ok, output=out, per_artifact=per, assertions=_parse_assertions(out))
+    finally:
+        shutil.rmtree(unit.root, ignore_errors=True)
+
+
+def admit(artifacts: dict[str, str], *, domain: str, subdomain: str, structure: str,
+          timeout: float = 300.0) -> Admission:
+    """Ownership Resolution + Federation Assembly + compile. Non-mutating; canonical repos untouched."""
+    return compile_unit(assemble(artifacts, domain=domain, subdomain=subdomain),
+                        structure=structure, timeout=timeout)

@@ -1,8 +1,8 @@
 """Build Sheet projection proof — project the real blockchain/chain corpus (S2/S5/S6b/S7) and check
 the projection assembles without inventing: every governed fact lands; every missing one is a GAP.
 
-Run: python -m pgs_change_mgmt.engine._build_sheet_selftest   (needs PGS_WORKSPACE for nothing here —
-it parses the committed chain dossier docs directly).
+Run: python -m pgs_change_mgmt.engine._build_sheet_selftest   (hermetic — parses the frozen chain
+fixture, never the live working dossier).
 """
 
 from __future__ import annotations
@@ -11,10 +11,9 @@ import re
 from pathlib import Path
 
 from ..renderer.template_compiler import header_to_key
+from ._fixture import chain_dossier
 from .build_sheet import project_build_sheets, render_markdown, OK, GAP, BUILDABLE, CONSTRUCTION_READY
 
-PKG = Path(__file__).resolve().parents[2]
-CHAIN = PKG / "change_mgmt" / "dossiers" / "blockchain" / "chain"
 _MARK = re.compile(r"<!--\s*register:([a-z0-9_]+)")
 
 
@@ -49,8 +48,9 @@ def _parse(path: Path) -> dict[str, list[dict]]:
 
 def main() -> int:
     up: dict[str, list] = {}
-    for stage in ("5_business_intent", "6b_design_intent", "7_authoring_mandate"):
-        up.update(_parse(CHAIN / f"{stage}_blockchain_chain_v0.md"))
+    with chain_dossier() as chain:
+        for stage in ("5_business_intent", "6b_design_intent", "7_authoring_mandate"):
+            up.update(_parse(chain / f"{stage}_blockchain_chain_v0.md"))
 
     model = project_build_sheets(up, domain="blockchain", subdomain="chain")
     by = {s.code: s for s in model.sheets}

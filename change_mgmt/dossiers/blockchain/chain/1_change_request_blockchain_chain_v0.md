@@ -107,7 +107,7 @@ INVALID: "WF_REGISTER_VALIDATOR_V0 exists"
 <!-- register:cr_type business_language -->
 | Classification (NEW_SUBDOMAIN, EXTEND_SUBDOMAIN, MODIFY, DEPRECATE) | Rationale | Source Finding |
 |----------------|-----------|----------------|
-| NEW_SUBDOMAIN | the canonical ledger (chain) is a distinct concern from block proposal and needs its own governance boundary; it is not an extension of an existing subdomain | seed §1 CR Type |
+| NEW_SUBDOMAIN | The canonical ledger ('chain') is a distinct concern from block proposal and needs its own governance boundary; it is not an extension of an existing subdomain. | CR seed §1 CR Type |
 
 ---
 
@@ -120,15 +120,15 @@ already means. Define the term, not its implementation.*
 <!-- register:business_vocabulary business_language -->
 | Term | Definition | Source Finding |
 |------|------------|----------------|
-| Chain | the authoritative, ordered, append-only ledger of committed blocks (canonical chain / canonical ledger are synonyms) | seed §2 |
-| Block | a unit of the ledger produced by a proposer and recorded on the chain; carries the transactions of its round | seed §2 |
-| Proposed Block | a block produced by a proposer in the consensus loop, not yet committed and not yet authoritative | seed §2 |
-| Commit | to make a proposed block part of the canonical chain — hashed as its signature, linked to its predecessor, recorded as canonical; irreversible, and on commit the block and its transactions become immutable and authoritative | seed §2 |
-| Genesis Block | the chain's first block; same form as any block, containing the first system transaction — a mint crediting the MINT wallet — performed by the Genesis Actor | seed §2 |
-| Bootstrap | the one-time genesis sequence that establishes the initial chain and supply, before the consensus loop runs | seed §2 |
-| Genesis Actor | the special, permanent actor that receives the initial minted supply at bootstrap and owns the MINT wallet thereafter | seed §2 |
-| Proposer | the validator selected to produce a block in a given round | seed §2 |
-| BachiCoin | the system's unit of value; the supply is a closed monetary system | seed §2 |
+| Chain | The authoritative, ordered, append-only ledger of committed blocks (also called the canonical chain or canonical ledger). | CR seed §2 Business Vocabulary |
+| Block | A unit of the ledger produced by a proposer and recorded on the chain; carries the transactions of its round. | CR seed §2 Business Vocabulary |
+| Proposed Block | A block produced by a proposer in the consensus loop, not yet committed and not yet authoritative. | CR seed §2 Business Vocabulary |
+| Commit | To make a proposed block part of the canonical chain: its content is hashed as its signature, it is linked to its predecessor, and it is recorded as canonical. Commit is irreversible; on commit the block and its contained transactions become immutable and authoritative. | CR seed §2 Business Vocabulary |
+| Genesis Block | The chain's first block. It has the same form as any block and contains the first system transaction — a mint crediting the mint wallet — performed by the Genesis Actor. | CR seed §2 Business Vocabulary |
+| Bootstrap | The one-time genesis sequence that establishes the initial chain and supply, before the consensus loop runs. | CR seed §2 Business Vocabulary |
+| Genesis Actor | The special, permanent actor that receives the initial minted supply at bootstrap and owns the mint wallet thereafter. | CR seed §2 Business Vocabulary |
+| Proposer | The validator selected to produce a block in a given round. | CR seed §2 Business Vocabulary |
+| BachiCoin | The system's unit of value; the supply is a closed monetary system. | CR seed §2 Business Vocabulary |
 
 ---
 
@@ -139,9 +139,9 @@ already means. Define the term, not its implementation.*
 <!-- register:requested_outcomes business_language -->
 | Outcome | Source Finding |
 |---------|----------------|
-| establish a closed, canonical chain (ledger) that commits proposer-produced blocks to an authoritative, append-only record | seed §3.1 |
-| bootstrap the chain from a genesis block that mints the initial supply to a Genesis Actor before the consensus loop runs | seed §3.2 |
-| for this increment, commit all proposed blocks directly to the chain (attest/finalize steps of the PoS model deferred) | seed §3.3 |
+| Establish a closed, canonical chain (ledger) that commits proposer-produced blocks to an authoritative, append-only record. | CR seed §3 Requested Outcomes #1 |
+| Bootstrap the chain from a genesis block that mints the initial supply to a Genesis Actor before the consensus loop runs. | CR seed §3 Requested Outcomes #2 |
+| For this increment, commit all proposed blocks directly to the chain, emulating the proof-of-stake model with attestation and finalization deferred to future iterations. | CR seed §3 Requested Outcomes #3 |
 
 ---
 
@@ -154,16 +154,17 @@ statements about what the system currently provides (those are §5 System Belief
 <!-- register:known_facts business_language -->
 | Fact | Certainty (HIGH, MEDIUM, LOW) | Source Finding |
 |------|-----------|----------------|
-| a canonical chain (ledger) is required as the authoritative record of committed blocks | HIGH | seed §4.1 |
-| a genesis bootstrap is required, and must occur before consensus execution begins | HIGH | seed §4.2 |
-| the genesis block shall mint an initial supply of 1,000,000 BachiCoin | HIGH | seed §4.3 |
-| the initial supply shall be assigned to a Genesis Actor, which is permanent and owns the MINT wallet | HIGH | seed §4.4 |
-| minting occurs only during genesis bootstrap; no minting and no burning occur in this release | HIGH | seed §4.5 |
-| for this development increment, all proposer-produced blocks are committed to the chain | HIGH | seed §4.6 |
-| attestation and finalization are intentionally deferred to a future iteration | HIGH | seed §4.7 |
-| consensus proposes; the chain records and is the authoritative source of committed history | HIGH | seed §4.8 |
-| in this release, the chain commits every proposed block without additional validation | HIGH | seed §4.9 |
-| on commit, a block and its contained transactions become authoritative and immutable | HIGH | seed §4.10 |
+| A canonical chain (ledger) is required as the authoritative record of committed blocks. | HIGH | CR seed §4 Known Facts #1 |
+| A genesis bootstrap is required, and must occur before consensus execution begins. | HIGH | CR seed §4 Known Facts #2 |
+| The genesis block shall mint an initial supply of 1,000,000 BachiCoin. | HIGH | CR seed §4 Known Facts #3 |
+| The initial supply shall be assigned to a Genesis Actor, which is permanent and owns the mint wallet. | HIGH | CR seed §4 Known Facts #4 |
+| Minting occurs only during genesis bootstrap; no minting and no burning occur in this release. | HIGH | CR seed §4 Known Facts #5 |
+| For this development increment, all proposer-produced blocks are committed to the chain. | HIGH | CR seed §4 Known Facts #6 |
+| Attestation and finalization are intentionally deferred to a future iteration. | HIGH | CR seed §4 Known Facts #7 |
+| Consensus proposes; the chain records and is the authoritative source of committed history. | HIGH | CR seed §4 Known Facts #8 |
+| In this release, the chain commits every proposed block without additional validation. | HIGH | CR seed §4 Known Facts #9 |
+| On commit, a block and its contained transactions become authoritative and immutable. | HIGH | CR seed §4 Known Facts #10 |
+| Wallet balances are derived from committed transactions and reconciled on the chain as a post-commit reconciliation process; the chain does not maintain independent balance state. | HIGH | CR seed §4 Known Facts #11 (human decision, S2 design review) |
 
 ---
 
@@ -177,15 +178,15 @@ confirm or refute the belief (governing workflow(s), producers, emitted records,
 <!-- register:system_beliefs business_language -->
 | Belief | Why It Matters | Verification Goal | Source Finding |
 |--------|----------------|-------------------|----------------|
-| the current implementation does not yet provide a chain that commits proposed blocks | this CR exists to fill that gap; if a commit capability already exists, the CR scope changes | confirm no existing capability commits proposed blocks to a ledger | seed §5.1 |
-| a consensus loop already exists that proposes blocks and drives slot processing | the chain commits exactly the blocks this loop proposes — its upstream producer | identify the governing workflow(s), their producers, the records emitted, and the owning subdomain | seed §5.2 |
-| a block-proposal capability already exists | defines the input the chain commit consumes | identify the capability that produces a proposed block and the record/shape it emits | seed §5.3 |
-| a validator registry already exists | validators feed proposer selection upstream of the chain | identify where validators are registered and how proposer selection reads it | seed §5.4 |
-| a wallet capability already exists | genesis mints the initial supply to the MINT wallet held by the Genesis Actor | identify the wallet capability and how a balance/mint is recorded | seed §5.5 |
-| a transaction capability already exists | part of the pipeline actor → wallet → transaction → mempool | identify the transaction capability and its place in that pipeline | seed §5.6 |
-| a mempool already exists | transactions queue there before block formation | identify the mempool store and how transactions queue before a block is formed | seed §5.7 |
-| an orchestration subdomain already exists | drives slot processing / the consensus loop | identify the orchestration/slot-processing driver and what it invokes | seed §5.8 |
-| adjacent subdomains exist: identity, wallet, transaction, mempool, consensus_pos, orchestration | establishes the neighborhood the new chain subdomain plugs into | confirm each named subdomain exists and note its owning boundary | seed §5.9 |
+| The current implementation does not yet provide a chain that commits proposed blocks. | This CR exists to fill that gap; if a commit capability already exists, the CR scope changes. | Confirm no existing capability commits proposed blocks to a ledger. | CR seed §5 System Beliefs #1 |
+| A consensus loop already exists that proposes blocks and drives slot processing. | The chain commits exactly the blocks this loop proposes — its upstream producer. | Identify the governing workflow(s), their producers, the records emitted, and the owning subdomain. | CR seed §5 System Beliefs #2 |
+| A block-proposal capability already exists. | Defines the input the chain commit consumes. | Identify the capability that produces a proposed block and the record/shape it emits. | CR seed §5 System Beliefs #3 |
+| A validator registry already exists. | Validators feed proposer selection upstream of the chain. | Identify where validators are registered and how proposer selection reads it. | CR seed §5 System Beliefs #4 |
+| A wallet capability already exists. | Genesis mints the initial supply to the mint wallet held by the Genesis Actor. | Identify the wallet capability and how a balance/mint is recorded. | CR seed §5 System Beliefs #5 |
+| A transaction capability already exists. | Part of the pipeline actor to wallet to transaction to mempool. | Identify the transaction capability and its place in that pipeline. | CR seed §5 System Beliefs #6 |
+| A mempool already exists. | Transactions queue there before block formation. | Identify the mempool store and how transactions queue before a block is formed. | CR seed §5 System Beliefs #7 |
+| An orchestration subdomain already exists. | Drives slot processing and the consensus loop. | Identify the orchestration/slot-processing driver and what it invokes. | CR seed §5 System Beliefs #8 |
+| Adjacent subdomains exist: identity, wallet, transaction, mempool, consensus, orchestration. | Establishes the neighborhood the new chain subdomain plugs into. | Confirm each named subdomain exists and note its owning boundary. | CR seed §5 System Beliefs #9 |
 
 ---
 
@@ -197,7 +198,7 @@ load-bearing and unverified, prefer raising a clarification request instead.*
 <!-- register:assumptions business_language optional -->
 | Assumption | Basis | Source Finding |
 |------------|-------|----------------|
-| all proposed blocks are good and are committed as finalized (no rejection path this increment) | incremental-development decision; attest/finalize deferred | seed §6 |
+| All proposed blocks are good and are committed as finalized (no rejection path this increment). | Incremental-development decision; attestation and finalization deferred. | CR seed §6 Assumptions |
 
 ---
 
@@ -208,9 +209,9 @@ load-bearing and unverified, prefer raising a clarification request instead.*
 <!-- register:constraints business_language -->
 | Constraint | Source | Source Finding |
 |------------|--------|----------------|
-| closed monetary system — no supply enters or leaves except by the system's own rules | business policy | seed §7 |
-| the chain is immutable — a committed block cannot be altered or removed | business policy | seed §7 |
-| genesis supply is fixed at 1,000,000 BachiCoin, minted to the Genesis Actor at bootstrap | business policy | seed §7 |
+| Closed monetary system — no supply enters or leaves except by the system's own rules. | Business policy | CR seed §7 Constraints |
+| The chain is immutable — a committed block cannot be altered or removed. | Business policy | CR seed §7 Constraints |
+| Genesis supply is fixed at 1,000,000 BachiCoin, minted to the Genesis Actor at bootstrap. | Business policy | CR seed §7 Constraints |
 
 ---
 
@@ -223,13 +224,13 @@ invariant is inadmissible). Each is a single, testable business statement.*
 <!-- register:business_invariants business_language -->
 | Invariant | Source Finding |
 |-----------|----------------|
-| exactly one genesis block exists per chain | seed §8.1 |
-| genesis executes exactly once at bootstrap and is never replayed | seed §8.2 |
-| total supply is conserved and equals 1,000,000 BachiCoin (no minting or burning after genesis) | seed §8.3 |
-| a committed block is immutable — it never changes or disappears | seed §8.4 |
-| every committed block has exactly one predecessor, except the genesis block | seed §8.5 |
-| a block cannot be committed twice | seed §8.6 |
-| the canonical chain is the authoritative source of committed history; a proposed block is not authoritative until committed | seed §8.7 |
+| Exactly one genesis block exists per chain. | CR seed §8 Business Invariants #1 |
+| Genesis executes exactly once at bootstrap and is never replayed. | CR seed §8 Business Invariants #2 |
+| Total supply is conserved and equals 1,000,000 BachiCoin (no minting or burning after genesis). | CR seed §8 Business Invariants #3 |
+| A committed block is immutable — it never changes or disappears. | CR seed §8 Business Invariants #4 |
+| Every committed block has exactly one predecessor, except the genesis block. | CR seed §8 Business Invariants #5 |
+| A block cannot be committed twice. | CR seed §8 Business Invariants #6 |
+| The canonical chain is the authoritative source of committed history; a proposed block is not authoritative until committed. | CR seed §8 Business Invariants #7 |
 
 ---
 
@@ -241,11 +242,11 @@ the state transitions a design must support (and the ones it must not). One row 
 <!-- register:lifecycle_states business_language -->
 | Object | State | Meaning | Source Finding |
 |--------|-------|---------|----------------|
-| Chain | Uninitialized | no genesis block yet; the chain is not established | seed §9 |
-| Chain | Active | genesis created; the chain accepts and commits blocks | seed §9 |
-| Block | Proposed | produced by a proposer; not yet committed and not authoritative | seed §9 |
-| Block | Committed | recorded in the canonical chain; immutable and authoritative | seed §9 |
-| Genesis Block | Created Once | the single first block, established at bootstrap; permanent | seed §9 |
+| Chain | Uninitialized | No genesis block yet; the chain is not established. | CR seed §9 Lifecycle States |
+| Chain | Active | Genesis created; the chain accepts and commits blocks. | CR seed §9 Lifecycle States |
+| Block | Proposed | Produced by a proposer; not yet committed and not authoritative. | CR seed §9 Lifecycle States |
+| Block | Committed | Recorded in the canonical chain; immutable and authoritative. | CR seed §9 Lifecycle States |
+| Genesis Block | Created Once | The single first block, established at bootstrap; permanent. | CR seed §9 Lifecycle States |
 
 ---
 
@@ -257,9 +258,10 @@ language (not artifact/event-code names). One row per event.*
 <!-- register:business_events business_language -->
 | Event | When It Occurs | Significance | Source Finding |
 |-------|----------------|--------------|----------------|
-| Genesis Created | once, at bootstrap, before the consensus loop runs | establishes the chain and the initial monetary state | seed §10 |
-| Block Proposed | when a proposer produces a block in a round | a candidate block exists; not yet authoritative | seed §10 |
-| Block Committed | when a proposed block is committed to the canonical chain | the block and its contained transactions become authoritative and immutable | seed §10 |
+| Genesis Created | Once, at bootstrap, before the consensus loop runs. | Establishes the chain and the initial monetary state. | CR seed §10 Business Events |
+| Block Proposed | When a proposer produces a block in a round. | A candidate block exists; not yet authoritative. | CR seed §10 Business Events |
+| Block Committed | When a proposed block is committed to the canonical chain. | The block and its contained transactions become authoritative and immutable. | CR seed §10 Business Events |
+| Balance Reconciled | After a block is committed, when wallet balances are recomputed from the committed transactions. | Wallet balances become consistent with the canonical committed history. | CR seed §10 Business Events (human decision, S2 design review) |
 
 ---
 
@@ -272,11 +274,11 @@ boundary a design must respect. State the owner in business terms, not artifact 
 <!-- register:authority_boundaries business_language -->
 | Business Object | Authoritative Owner | Source Finding |
 |-----------------|---------------------|----------------|
-| Proposed Block | Consensus | seed §11 |
-| Committed Block | Chain | seed §11 |
-| Committed History | Chain | seed §11 |
-| Monetary Supply | Genesis at bootstrap, then Chain | seed §11 |
-| Wallet Balance | Chain | seed §11 |
+| Proposed Block | Consensus | CR seed §11 Authority Boundaries |
+| Committed Block | Chain | CR seed §11 Authority Boundaries |
+| Committed History | Chain | CR seed §11 Authority Boundaries |
+| Monetary Supply | Genesis at bootstrap, then Chain | CR seed §11 Authority Boundaries |
+| Wallet Balance | Chain (derived by post-commit reconciliation from committed transactions, not owned as independent state) | CR seed §11 Authority Boundaries (human decision, S2 design review) |
 
 ---
 
@@ -288,12 +290,12 @@ explicitly so downstream stages do not chase future-state architecture.*
 <!-- register:out_of_scope business_language optional -->
 | Item | Reason | Source Finding |
 |------|--------|----------------|
-| the Attest step of the PoS progression | deferred to a future iteration; all proposed blocks treated as good this increment | seed §12 |
-| the Finalize step of the PoS progression | deferred to a future iteration; proposed blocks committed directly | seed §12 |
-| fork resolution | not part of this release; the chain commits every proposed block | seed §12 |
-| chain reorganization (reorg) | not part of this release; committed history is immutable | seed §12 |
-| slashing | validator penalties are out of scope this release | seed §12 |
-| rewards | validator/proposer rewards are out of scope this release | seed §12 |
+| The attest step of the proof-of-stake progression. | Deferred to a future iteration; all proposed blocks treated as good this increment. | CR seed §12 Out of Scope |
+| The finalize step of the proof-of-stake progression. | Deferred to a future iteration; proposed blocks committed directly. | CR seed §12 Out of Scope |
+| Fork resolution. | Not part of this release; the chain commits every proposed block. | CR seed §12 Out of Scope |
+| Chain reorganization (reorg). | Not part of this release; committed history is immutable. | CR seed §12 Out of Scope |
+| Slashing. | Validator penalties are out of scope this release. | CR seed §12 Out of Scope |
+| Rewards. | Validator/proposer rewards are out of scope this release. | CR seed §12 Out of Scope |
 
 ---
 
@@ -305,13 +307,13 @@ item declares its `Relationship` to this CR — what the CR does to/with that bo
 <!-- register:governance_scope business_language -->
 | Scope Item | Relationship (CREATED, ADJACENT) | Source Finding |
 |------------|----------------|----------------|
-| chain | CREATED | seed §13 |
-| consensus_pos | ADJACENT | seed §13 |
-| orchestration | ADJACENT | seed §13 |
-| wallet | ADJACENT | seed §13 |
-| transaction | ADJACENT | seed §13 |
-| mempool | ADJACENT | seed §13 |
-| identity | ADJACENT | seed §13 |
+| chain | CREATED | CR seed §13 Governance Scope |
+| consensus_pos | ADJACENT | CR seed §13 Governance Scope |
+| orchestration | ADJACENT | CR seed §13 Governance Scope |
+| wallet | ADJACENT | CR seed §13 Governance Scope |
+| transaction | ADJACENT | CR seed §13 Governance Scope |
+| mempool | ADJACENT | CR seed §13 Governance Scope |
+| identity | ADJACENT | CR seed §13 Governance Scope |
 
 ---
 
@@ -338,11 +340,11 @@ internals.*
 <!-- register:acceptance_criteria business_language -->
 | Criterion | Source Finding |
 |-----------|----------------|
-| the chain begins with a genesis block that records the assignment of the initial 1,000,000 BachiCoin supply to the Genesis Actor | seed §15.1 |
-| blocks accepted by the chain appear in the authoritative ledger in proposal order | seed §15.2 |
-| a block recorded in the ledger never changes or disappears | seed §15.3 |
-| the total recorded supply on the ledger is 1,000,000 BachiCoin, held initially by the Genesis Actor | seed §15.4 |
-| once committed, a block and its contained transactions are treated as authoritative | seed §15.5 |
+| The chain begins with a genesis block that records the assignment of the initial 1,000,000 BachiCoin supply to the Genesis Actor. | CR seed §15 Acceptance Criteria #1 |
+| Blocks accepted by the chain appear in the authoritative ledger in proposal order. | CR seed §15 Acceptance Criteria #2 |
+| A block recorded in the ledger never changes or disappears. | CR seed §15 Acceptance Criteria #3 |
+| The total recorded supply on the ledger is 1,000,000 BachiCoin, held initially by the Genesis Actor. | CR seed §15 Acceptance Criteria #4 |
+| Once committed, a block and its contained transactions are treated as authoritative. | CR seed §15 Acceptance Criteria #5 |
 
 ---
 

@@ -1,0 +1,145 @@
+{
+  "ownership": [
+    {
+      "capability": "Commit a proposed block to the canonical chain",
+      "owner_subdomain": "chain",
+      "disposition": "OWNED",
+      "existing_artifact": "",
+      "source_finding": "S4 gap_register GAP-1"
+    },
+    {
+      "capability": "Store the canonical chain ledger and track its head",
+      "owner_subdomain": "chain",
+      "disposition": "OWNED",
+      "existing_artifact": "",
+      "source_finding": "S4 gap_register GAP-2"
+    },
+    {
+      "capability": "Validate a block's predecessor link before commit",
+      "owner_subdomain": "chain",
+      "disposition": "OWNED",
+      "existing_artifact": "",
+      "source_finding": "S4 gap_register GAP-3"
+    },
+    {
+      "capability": "Compute a block's content signature",
+      "owner_subdomain": "chain",
+      "disposition": "OWNED",
+      "existing_artifact": "",
+      "source_finding": "S4 gap_register GAP-4"
+    },
+    {
+      "capability": "Bootstrap the genesis chain and initialise the supply",
+      "owner_subdomain": "chain",
+      "disposition": "OWNED",
+      "existing_artifact": "",
+      "source_finding": "S4 gap_register GAP-5"
+    },
+    {
+      "capability": "Reconcile wallet balances after commit by deriving from committed transactions and announcing the result",
+      "owner_subdomain": "chain",
+      "disposition": "OWNED",
+      "existing_artifact": "",
+      "source_finding": "S4 gap_register GAP-6"
+    },
+    {
+      "capability": "Mint the initial genesis supply",
+      "owner_subdomain": "wallet",
+      "disposition": "SATISFIED",
+      "existing_artifact": "blockchain::WF_MINT_V0",
+      "source_finding": "S3 authoring_decisions REUSE"
+    },
+    {
+      "capability": "Announce that a block was committed",
+      "owner_subdomain": "chain",
+      "disposition": "SATISFIED",
+      "existing_artifact": "blockchain::EV_BLOCK_COMMITTED_V0",
+      "source_finding": "S3 authoring_decisions REUSE"
+    },
+    {
+      "capability": "Announce that balances were reconciled",
+      "owner_subdomain": "chain",
+      "disposition": "SATISFIED",
+      "existing_artifact": "blockchain::EV_BALANCE_RECONCILED_V0",
+      "source_finding": "S3 authoring_decisions REUSE"
+    },
+    {
+      "capability": "Record a committed block using the existing block schema",
+      "owner_subdomain": "chain",
+      "disposition": "SATISFIED",
+      "existing_artifact": "blockchain::ENTITY_BLOCK_V0",
+      "source_finding": "S3 authoring_decisions REUSE"
+    },
+    {
+      "capability": "Attest proposed blocks",
+      "owner_subdomain": "chain",
+      "disposition": "DEFERRED",
+      "existing_artifact": "",
+      "source_finding": "S1 out_of_scope attest"
+    },
+    {
+      "capability": "Finalize committed blocks",
+      "owner_subdomain": "chain",
+      "disposition": "DEFERRED",
+      "existing_artifact": "",
+      "source_finding": "S1 out_of_scope finalize"
+    }
+  ],
+  "storage_governance": [
+    {
+      "storage_need": "An append-only ledger of committed blocks with a pointer to the current head",
+      "purpose": "Preserve the immutable, ordered history of committed blocks and identify the block a new commit must link to",
+      "subdomain": "chain",
+      "source_finding": "S5 business_objects; S4 gap_register GAP-2"
+    }
+  ],
+  "cross_subdomain_deps": [
+    {
+      "dependency": "Read the proposed block produced by the consensus loop",
+      "direction": "chain \u2192 consensus_pos",
+      "existing_artifact": "blockchain::WF_PROPOSE_BLOCK_V0",
+      "status": "SATISFIED",
+      "source_finding": "S3 dependency_discoveries EXISTING"
+    },
+    {
+      "dependency": "Mint the initial supply at genesis",
+      "direction": "chain \u2192 wallet",
+      "existing_artifact": "blockchain::WF_MINT_V0",
+      "status": "SATISFIED",
+      "source_finding": "S3 authoring_decisions REUSE"
+    },
+    {
+      "dependency": "Announce reconciled balances for the wallet subdomain to apply to its own store",
+      "direction": "chain \u2192 wallet",
+      "existing_artifact": "blockchain::EV_BALANCE_RECONCILED_V0",
+      "status": "SATISFIED",
+      "source_finding": "S1 known_facts #11; the chain never writes the wallet store"
+    }
+  ],
+  "pps_artifacts_requiring_action": [
+    {
+      "fqdn": "blockchain::EV_BLOCK_COMMITTED_V0",
+      "current_status": "Declared but unemitted (0 references)",
+      "action": "REUSE",
+      "source_finding": "S3 verification_results; the chain becomes its emitter"
+    },
+    {
+      "fqdn": "blockchain::EV_BALANCE_RECONCILED_V0",
+      "current_status": "Declared but unreferenced",
+      "action": "REUSE",
+      "source_finding": "S3 verification_results"
+    },
+    {
+      "fqdn": "blockchain::ENTITY_BLOCK_V0",
+      "current_status": "Exists, 0 consumers",
+      "action": "REUSE",
+      "source_finding": "S3 impact_analysis"
+    },
+    {
+      "fqdn": "blockchain::WF_MINT_V0",
+      "current_status": "Exists; reused as the genesis mint step",
+      "action": "REUSE",
+      "source_finding": "S3 authoring_decisions REUSE"
+    }
+  ]
+}

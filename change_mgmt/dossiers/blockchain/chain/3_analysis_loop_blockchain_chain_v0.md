@@ -86,8 +86,10 @@ Each analysis finding carries an `evidence_status` and a `confidence`:
 <!-- register:analysis_findings -->
 | Question Id | Finding | Impact | Evidence Status (OBSERVED, INFERRED, OPEN) | Confidence (HIGH, MEDIUM, LOW) | Resolution Status (CLOSED, OPEN) | Evidence |
 |-------------|---------|--------|-----------------|------------|-------------------|----------|
-| S2-Q1 | the committed-block event exists but no capability produces it; the new chain commit capability should emit it rather than author a duplicate | avoids a duplicate event and keeps a single committed signal | OBSERVED | HIGH | CLOSED | blockchain::EV_BLOCK_COMMITTED_V0 |
-| S2-Q2 | a mint capability already exists; genesis bootstrap should invoke it once at startup rather than author a second minting path | keeps a single minting rule and the closed-supply invariant | OBSERVED | HIGH | CLOSED | blockchain::WF_MINT_V0 |
+| Q1 | The block-committed event is declared but has zero consumers and no producer; to be useful it must carry the committed block's identity — its content signature, predecessor link, height, and the set of committed transactions — so downstream subdomains can observe committed history. The exact field schema is bound at design (S6b); the analysis-level answer is settled. | Shapes the commit capability's output and the event payload. | INFERRED | MEDIUM | CLOSED | pi artifact refs blockchain::EV_BLOCK_COMMITTED_V0 → Referenced by (0); blockchain::ENTITY_BLOCK_V0 defines the block record |
+| Q2 | Computing a block's content signature has no block-specific capability. A generic keccak hash primitive exists and a transaction hash exists, but neither hashes a canonical block, so a block-canonical hash transform must be authored (it may reuse the keccak primitive underneath). | Determines the commit step that produces the block signature. | OBSERVED | HIGH | CLOSED | pi vocab search HASH → blockchain::CC_HASH_TRANSACTION_V0, capability_transforms::CT_PURE_KECCAK256_HASH_V0 (no block hash) |
+| Q3 | No predecessor-link validation exists, so commit needs a new capability to enforce one predecessor per committed block against the chain head. | Guards the immutability and single-predecessor invariants at commit. | OBSERVED | HIGH | CLOSED | pi vocab search PREDECESSOR → Matches (0) |
+| Q4 | Wallet-balance reconciliation (the human's S2 decision) has no capability today, though a balance-reconciled event already exists; a post-commit reconciliation capability must be authored to realise the derived-balance model. | Realises the wallet-balance authority decision folded into business truth. | OBSERVED | HIGH | CLOSED | pi vocab search BALANCE → blockchain::EV_BALANCE_RECONCILED_V0 (event only, no capability) |
 
 ---
 
@@ -98,15 +100,18 @@ Each analysis finding carries an `evidence_status` and a `confidence`:
 <!-- register:verification_results -->
 | Item | Origin | Result (CONFIRMED, OVERTURNED) | Evidence |
 |------|--------|--------|----------|
-| no capability commits a proposed block to a ledger | S2 belief 1 | CONFIRMED | blockchain::EV_BLOCK_COMMITTED_V0 is an orphan event; no commit capability exists |
-| a consensus loop proposes blocks and drives slot processing | S2 belief 2 | CONFIRMED | blockchain::WF_PROCESS_SLOT_V0 |
-| a block-proposal capability produces a proposed block | S2 belief 3 | CONFIRMED | blockchain::WF_PROPOSE_BLOCK_V0, blockchain::CC_FORM_BLOCK_V0 |
-| a validator registry records validators for proposer selection | S2 belief 4 | CONFIRMED | blockchain::WF_REGISTER_VALIDATOR_V0, blockchain::CC_QUERY_ELIGIBLE_VALIDATORS_V0 |
-| a wallet capability records balances and keys | S2 belief 5 | CONFIRMED | blockchain::WF_CREATE_WALLET_V0 |
-| a transaction capability exists in the pipeline | S2 belief 6 | CONFIRMED | blockchain::WF_SUBMIT_TRANSACTION_V0 |
-| a mempool queues transactions before block formation | S2 belief 7 | CONFIRMED | blockchain::CC_CLAIM_MEMPOOL_TXS_V0 |
-| an orchestration subdomain drives slot processing | S2 belief 8 | CONFIRMED | blockchain::WF_PROCESS_SLOT_V0 |
-| adjacent subdomains identity, wallet, transaction, mempool, consensus and orchestration exist | S2 belief 9 | CONFIRMED | blockchain::WF_CREATE_WALLET_V0, blockchain::WF_SUBMIT_TRANSACTION_V0 |
+| The current implementation does not yet provide a chain that commits proposed blocks. | S2 belief_verification #1 | CONFIRMED | pi vocab search COMMIT → only blockchain::EV_BLOCK_COMMITTED_V0 [EV]; no committing CC/WF |
+| A consensus loop exists that proposes blocks and drives slot processing. | S2 belief_verification #2 | CONFIRMED | pi vocab search CONSENSUS → 7 matches incl. blockchain::IN_CONSENSUS_LOOP_STARTED_V0, blockchain::IN_CONSENSUS_SLOTS_V0 |
+| A block-proposal capability exists. | S2 belief_verification #3 | CONFIRMED | pi vocab search PROPOSE → blockchain::EV_BLOCK_PROPOSED_V0, blockchain::CC_SELECT_PROPOSER_V0 (blockchain::WF_PROPOSE_BLOCK_V0) |
+| A validator registry exists. | S2 belief_verification #4 | CONFIRMED | pi vocab search VALIDATOR → 8 matches incl. blockchain::CC_WRITE_VALIDATOR_RECORD_V0, blockchain::CC_QUERY_ELIGIBLE_VALIDATORS_V0 |
+| A wallet capability exists. | S2 belief_verification #5 | CONFIRMED | pi vocab search WALLET → 15 matches incl. blockchain::CC_CREATE_WALLET_RECORD_V0 |
+| A transaction capability exists. | S2 belief_verification #6 | CONFIRMED | pi vocab search SUBMIT → blockchain::RB_SUBMIT_TRANSACTION_V0, blockchain::EV_TRANSACTION_SUBMITTED_V0 (blockchain::ENTITY_TRANSACTION_V0) |
+| A mempool exists. | S2 belief_verification #7 | CONFIRMED | pi vocab search MEMPOOL → 6 matches incl. blockchain::CC_WRITE_MEMPOOL_TX_V0, blockchain::CC_DRAIN_MEMPOOL_V0 |
+| An orchestration subdomain exists. | S2 belief_verification #8 | CONFIRMED | pi vocab search SIMULATION → blockchain::IN_RUN_CHAIN_SIMULATION_V0, blockchain::CC_DISPATCH_SIMULATION_WORKERS_V0 (blockchain::STRUCTURE_BLOCKCHAIN_ORCHESTRATION_STORAGE_V0) |
+| Adjacent subdomains exist: identity, wallet, transaction, mempool, consensus, orchestration. | S2 belief_verification #9 | CONFIRMED | pi vocab search ACTOR → 22 matches (identity); WALLET/MEMPOOL/CONSENSUS searches above confirm the neighbourhood |
+| No genesis bootstrap capability exists. | S2 gaps #3 | CONFIRMED | pi vocab search GENESIS → Matches (0); pi vocab search BOOTSTRAP → Matches (0) |
+| A block-committed event exists but is unemitted. | S2 discovery_concerns | CONFIRMED | pi artifact refs blockchain::EV_BLOCK_COMMITTED_V0 → Referenced by (0) |
+| A balance-reconciled event exists to carry the reconciliation moment. | S1 business_events / S2 architectural_observations | CONFIRMED | pi vocab search BALANCE → blockchain::EV_BALANCE_RECONCILED_V0; pi artifact refs → Referenced by (0) |
 
 ---
 
@@ -117,11 +122,18 @@ Each analysis finding carries an `evidence_status` and a `confidence`:
 <!-- register:dependency_discoveries -->
 | Dependency | Type | Disposition (EXISTING, REUSE, AUTHOR_NEW, INVESTIGATE) | Evidence |
 |------------|------|-------------|----------|
-| the proposed block the chain commits | record consumed from the consensus loop | EXISTING | blockchain::WF_PROPOSE_BLOCK_V0 |
-| the transactions carried in a block | records drained from the mempool | EXISTING | blockchain::CC_CLAIM_MEMPOOL_TXS_V0 |
-| the minting rule used at genesis | policy the genesis bootstrap invokes | REUSE | blockchain::WF_MINT_V0 |
-| the committed-block signal | event the commit capability emits | REUSE | blockchain::EV_BLOCK_COMMITTED_V0 |
-| the canonical ledger store for committed blocks | storage the chain owns | AUTHOR_NEW | S2 gap: no ledger node in the neighbourhood |
+| Proposed block produced by the consensus loop | upstream producer | EXISTING | blockchain::WF_PROPOSE_BLOCK_V0, blockchain::CC_FORM_BLOCK_V0 |
+| Committed block record schema | entity | REUSE | blockchain::ENTITY_BLOCK_V0 |
+| Content-hash primitive for the block signature | transform | REUSE | capability_transforms::CT_PURE_KECCAK256_HASH_V0 |
+| Minting for the genesis supply | capability | REUSE | blockchain::WF_MINT_V0, blockchain::CC_VALIDATE_MINT_POLICY_V0 |
+| Block-committed announcement | event | REUSE | blockchain::EV_BLOCK_COMMITTED_V0 |
+| Balance-reconciled announcement | event | REUSE | blockchain::EV_BALANCE_RECONCILED_V0 |
+| Canonical chain / ledger store | storage | AUTHOR_NEW | no chain store; only blockchain::STRUCTURE_BLOCKCHAIN_ORCHESTRATION_STORAGE_V0 exists |
+| Commit-a-proposed-block capability | capability | AUTHOR_NEW | pi vocab search COMMIT → event only |
+| Predecessor-link validation | transform | AUTHOR_NEW | pi vocab search PREDECESSOR → Matches (0) |
+| Block-canonical content hash | transform | AUTHOR_NEW | pi vocab search HASH → no block hash (only tx hash + generic keccak) |
+| Genesis bootstrap workflow | workflow | AUTHOR_NEW | pi vocab search GENESIS/BOOTSTRAP → Matches (0) |
+| Post-commit balance reconciliation capability | capability | AUTHOR_NEW | pi vocab search BALANCE → event only, no capability |
 
 ---
 
@@ -132,9 +144,10 @@ Each analysis finding carries an `evidence_status` and a `confidence`:
 <!-- register:impact_analysis -->
 | Artifact | Impact Scope | Consumer Count | Evidence |
 |----------|--------------|----------------|----------|
-| the committed-block signal | reused by the new commit capability; no other consumer today | 0 | blockchain::EV_BLOCK_COMMITTED_V0 |
-| the mint policy | invoked once by genesis bootstrap; existing mint path unchanged | 1 | blockchain::WF_MINT_V0 |
-| the block-proposal workflow | unchanged upstream producer; the chain consumes its output | 1 | blockchain::WF_PROPOSE_BLOCK_V0 |
+| blockchain::ENTITY_BLOCK_V0 | Reused as the committed block schema; no existing consumers, so reuse adds a consumer without disturbing anything. | 0 | pi topology impact blockchain::ENTITY_BLOCK_V0 → Impact closure (0) |
+| blockchain::EV_BLOCK_COMMITTED_V0 | Emitted by the new commit capability; currently referenced by nothing, so wiring an emitter has zero blast radius. | 0 | pi artifact refs blockchain::EV_BLOCK_COMMITTED_V0 → Referenced by (0) |
+| blockchain::EV_BALANCE_RECONCILED_V0 | Emitted by the new reconciliation capability; referenced by nothing today. | 0 | pi artifact refs blockchain::EV_BALANCE_RECONCILED_V0 → Referenced by (0) |
+| blockchain::WF_MINT_V0 | Reused as the genesis mint step; its impact closure is empty, so reuse is isolated. | 0 | pi topology impact blockchain::WF_MINT_V0 → Impact closure (0) |
 
 ---
 
@@ -156,12 +169,16 @@ Each analysis finding carries an `evidence_status` and a `confidence`:
 <!-- register:authoring_decisions business_language=capability -->
 | Capability | Decision (REUSE, EXTEND, AUTHOR_NEW) | Rationale | Alternatives Checked | Source Finding |
 |------------|----------|-----------|----------------------|----------------|
-| commit a proposed block to the canonical chain | AUTHOR_NEW | no capability commits a proposed block to a ledger; this is the core gap | searched the neighbourhood for a commit/append-block capability — none exists | S2 gap: no commit capability; blockchain::EV_BLOCK_COMMITTED_V0 orphan |
-| bootstrap genesis and mint the initial supply once | AUTHOR_NEW | no one-time genesis bootstrap sequence exists | the mint policy exists but is not sequenced as a one-time bootstrap | S2 gap: GENESIS and BOOTSTRAP absent |
-| the canonical ledger store for committed blocks | AUTHOR_NEW | committed history has no authoritative store | no ledger store node in the neighbourhood | S2 gap: no ledger node |
-| form a proposed block from mempool transactions | REUSE | the block-proposal capability already forms blocks; the chain consumes its output | authoring a new former would duplicate consensus work | blockchain::CC_FORM_BLOCK_V0 |
-| mint supply under policy | REUSE | genesis bootstrap invokes the existing mint policy once | a second minting path would break the single-supply invariant | blockchain::WF_MINT_V0 |
-| signal that a block was committed | REUSE | the committed-block event exists; the new commit capability emits it | authoring a duplicate event would fork the committed signal | blockchain::EV_BLOCK_COMMITTED_V0 |
+| Commit a proposed block to the canonical chain | AUTHOR_NEW | Nothing commits a proposed block; only an unemitted block-committed event exists. This is the core gap the CR fills. | searched COMMIT — only blockchain::EV_BLOCK_COMMITTED_V0 (an event), no committing capability | S2 gaps #1 |
+| Store the canonical chain ledger and track its head | AUTHOR_NEW | No append-only ledger store exists to hold committed blocks and the chain head. | only blockchain::STRUCTURE_BLOCKCHAIN_ORCHESTRATION_STORAGE_V0 exists — orchestration storage, not a chain store | S2 gaps #2 |
+| Validate a block's predecessor link before commit | AUTHOR_NEW | Nothing enforces one predecessor per committed block against the chain head. | searched PREDECESSOR — Matches (0) | S2 gaps #4 |
+| Compute a block's content signature | AUTHOR_NEW | No block-canonical hash exists; a new pure transform canonicalises the block and hashes it, reusing the generic keccak primitive underneath. | capability_transforms::CT_PURE_KECCAK256_HASH_V0 (generic bytes) and blockchain::CC_HASH_TRANSACTION_V0 (transaction-specific) — neither hashes a block | analysis_findings Q2 |
+| Bootstrap the genesis chain by creating the first block and initialising the supply | AUTHOR_NEW | No genesis or bootstrap capability exists; a one-time workflow creates the genesis block and initialises the chain before consensus runs. | searched GENESIS and BOOTSTRAP — Matches (0) for both | S2 gaps #3 |
+| Mint the initial genesis supply | REUSE | Minting already exists under a mint policy and can serve the genesis supply without a new monetary mechanism. | blockchain::WF_MINT_V0, blockchain::CC_VALIDATE_MINT_POLICY_V0 satisfy this as-is | S2 architectural_observations |
+| Announce that a block was committed | REUSE | The block-committed event already exists; the new commit capability emits it (payload settled in analysis Q1, bound at design). | blockchain::EV_BLOCK_COMMITTED_V0 exists (unemitted) | S2 discovery_concerns |
+| Record a committed block using the existing block schema | REUSE | The block entity already defines the record the chain commits. | blockchain::ENTITY_BLOCK_V0 fits exactly | S2 pps_baseline_fqdns |
+| Reconcile wallet balances after commit | AUTHOR_NEW | The human decided balances are derived and reconciled on-chain post-commit; no reconciliation capability exists to realise it. | searched BALANCE — only blockchain::EV_BALANCE_RECONCILED_V0 (an event), no reconciliation capability | S1 known_facts #11; S2 business_processes Reconcile wallet balances after commit |
+| Announce that balances were reconciled | REUSE | The balance-reconciled event already exists; the reconciliation capability emits it. | blockchain::EV_BALANCE_RECONCILED_V0 exists | S1 business_events Balance Reconciled |
 
 ---
 
@@ -172,7 +189,7 @@ Each analysis finding carries an `evidence_status` and a `confidence`:
 <!-- register:placement_decision business_language=subdomain -->
 | Decision (NEW_SUBDOMAIN, EXTEND) | Subdomain | Rationale | Source Finding |
 |----------|-----------|-----------|----------------|
-| NEW_SUBDOMAIN | chain | the canonical ledger is a distinct concern from block proposal and owns committed history; it is not an extension of an existing subdomain | S1 CR type NEW_SUBDOMAIN; S2 confirmed no existing ledger owner |
+| NEW_SUBDOMAIN | chain | The canonical ledger is a distinct governance concern from block proposal (consensus) and from the adjacent wallet, transaction, mempool, and identity subdomains; the human declared it a created boundary and no existing subdomain owns committed history. | S1 cr_type NEW_SUBDOMAIN; S1 governance_scope chain CREATED |
 
 ---
 
@@ -183,9 +200,11 @@ Each analysis finding carries an `evidence_status` and a `confidence`:
 <!-- register:saturation business_language=criterion -->
 | Criterion | Status (SATISFIED, NOT_SATISFIED) | Evidence |
 |-----------|--------|----------|
-| no unresolved CRITICAL gap remains | SATISFIED | all three CRITICAL S2 gaps have an AUTHOR_NEW decision |
-| no open analyst question remains | SATISFIED | both S2 open questions resolved as CLOSED analysis findings |
-| the dependency graph did not expand in the last pass | SATISFIED | all dependencies resolve to EXISTING/REUSE except the owned AUTHOR_NEW artifacts |
+| No unresolved critical gaps | SATISFIED | every HIGH gap (commit, chain store, genesis bootstrap) has a committed AUTHOR_NEW decision; the MEDIUM predecessor-validation gap likewise |
+| No open analyst questions | SATISFIED | all analysis_findings resolution_status = CLOSED |
+| No dependency expansion in the last pass | SATISFIED | the dependency set closed to reuse-or-author-new; no new INVESTIGATE dependencies surfaced |
+| Verification pass complete, no OVERTURNED item unresolved | SATISFIED | all six verification_results = CONFIRMED |
+| Every INFERRED finding promoted, accepted, or carried with a reason | SATISFIED | the single INFERRED finding (Q1 event payload) is accepted at analysis level; exact field schema explicitly carried to design (S6b) |
 
 *Required criteria: (1) no unresolved CRITICAL gaps; (2) no open analyst questions; (3) no dependency expansion in the last pass; (4) verification pass complete, no OVERTURNED item unresolved; (5) every INFERRED finding promoted to OBSERVED, explicitly accepted, or carried forward with a reason.*
 

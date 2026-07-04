@@ -95,8 +95,8 @@ def main() -> int:
                              evaluator=IdentityEvaluator(vocab=()), runs_root=tmp_root / "runs")
         s = result.stages[0]
         ok &= _check(not s.inadmissible, f"stage admissible (rating {s.rating}/5)")
-        handoff = cfg.output_dir / "_handoff" / "1.json"
-        ok &= _check(handoff.exists(), "engine persisted _handoff/1.json (handoff produced)")
+        handoff = cfg.output_dir / "cr_ir" / "1.json"
+        ok &= _check(handoff.exists(), "engine persisted cr_ir/1.json (handoff produced)")
         doc = cfg.output_dir / "1_change_request_blockchain_chain_v0.md"
         ok &= _check(doc.exists() and doc.read_text().strip() != "", "engine rendered the S1 document")
 

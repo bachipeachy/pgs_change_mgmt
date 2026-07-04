@@ -118,7 +118,7 @@ GOV_PROJECTION_SCHEMA: tuple[GovProjectionField, ...] = (
     # S6b already governs but historically left inside the rendered doc only. S8 ASSEMBLES them (no
     # invention), so Stage 6b must PUBLISH them — completing the seam, not widening it. On the rollout
     # ladder (WARNING now → ERROR once locked dossiers backfill): see PROJECTION_COMPLETENESS_PRINCIPLE
-    # in doc/parkinglot/CONSTRUCTION_DOCTRINE_V0.md — no downstream stage may recover these by reparsing
+    # in doc/CONSTRUCTION_MODEL_V0.md — no downstream stage may recover these by reparsing
     # narrative markdown.
     GovProjectionField("cc_composition", "6b", ("8",), "S6b §6 Capability Composition — per-CC CT/CS composition + data flow (declarative; the half of Design Intent the Build Sheet consumes)", fqdn_pointer=True, rollout=True),
     GovProjectionField("structure_stores", "6b", ("8",), "S6b §7 Structure Stores — entity-store declarations the Build Sheet assembles into STRUCTURE construction obligations", rollout=True),
@@ -127,6 +127,10 @@ GOV_PROJECTION_SCHEMA: tuple[GovProjectionField, ...] = (
     GovProjectionField("critical_path", "7", ("8",), "S7 §2 Critical Path"),
     GovProjectionField("mandate_artifact_summary", "7", ("8",), "S7 §3 Artifact Summary"),
     GovProjectionField("field_declarations", "7", ("8",), "S7 §4 Subdomain Field Declarations"),
+    # New-capability / new-intent business-intent declarations — the Construction Compiler realizes these
+    # into candidate CT and IN contracts (author declares intent; compiler derives protocol realization).
+    GovProjectionField("new_capabilities", "7", ("8",), "S7 §5 New Capabilities — business intent (code · purpose · typed inputs · typed outputs) the compiler realizes into candidate CT contracts", fqdn_pointer=True, rollout=True),
+    GovProjectionField("new_intents", "7", ("8",), "S7 §6 New Intents — ingress business intent (code · purpose · workflow · typed payload) the compiler realizes into candidate IN contracts", fqdn_pointer=True, rollout=True),
     # ---- S8 Build Sheet Set (the construction projection — ASSEMBLED, not authored, from S2/S5/S6b/S7;
     #      the construction-closed input to construction). Its consumed inputs are already wired:
     #      build_order/critical_path/field_declarations/mandate_artifact_summary (S7) + cc_composition (S6b). ----

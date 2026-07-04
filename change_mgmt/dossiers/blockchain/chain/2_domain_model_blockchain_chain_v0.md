@@ -141,13 +141,10 @@ objects, not a new set. A thing the business talks about, not a data store or ar
 <!-- register:entities business_language -->
 | Entity | Description | Store Model | Evidence Status | Source Finding |
 |--------|-------------|-------------|-----------------|----------------|
-| Chain | the authoritative, ordered, append-only ledger of committed blocks — the store this subdomain owns | append-only ledger | ABSENT | S1 §2; no ledger store in the neighbourhood |
-| Committed Block | a proposed block once committed to the chain; permanent, ordered, immutable | append-only record | ABSENT | S1 §2; blockchain::EV_BLOCK_COMMITTED_V0 orphan |
-| Proposed Block | a block produced by a proposer, not yet committed — produced upstream in consensus | consumed record (not owned) | EXISTING | blockchain::WF_PROPOSE_BLOCK_V0 |
-| Genesis Block | the chain's first block, written once at bootstrap, carrying the initial mint | append-only record | ABSENT | S1 §2; no bootstrap sequence |
-| BachiCoin | the closed-supply unit of value, minted once at genesis | reused mint policy (not owned) | EXISTING | blockchain::WF_MINT_V0 |
-| Genesis Actor | the permanent actor that receives the initial supply and owns the MINT wallet | actor record | OBSERVED | S1 §2 |
-| Validator | an actor eligible for proposer selection in a round | registry (adjacent) | EXISTING | blockchain::WF_REGISTER_VALIDATOR_V0 |
+| Chain | The authoritative, ordered, append-only ledger of committed blocks; the canonical record other subdomains rely on. | An append-only record holding every committed block in order, plus a pointer to the most recent committed block. | NOT_FOUND | S1 requested_outcomes #1; projection absent[COMMIT] — no ledger exists yet |
+| Block | A unit of the ledger produced by a proposer; carries the transactions of its round and links to its predecessor once committed. | Recorded as an element of the chain once committed; its content is hashed as its signature. | VERIFIED | S1 business_vocabulary Block; blockchain::ENTITY_BLOCK_V0 |
+| Genesis Block | The chain's first block; carries the first system transaction that mints the initial supply to the Genesis Actor. | The single first element of the chain, created once at bootstrap. | NOT_FOUND | S1 requested_outcomes #2; projection absent[GENESIS] |
+| Genesis Actor | The permanent actor that receives the initial minted supply at bootstrap and owns the mint wallet thereafter. | An actor record; the owning identity of the initial supply. | PARTIAL | S1 business_vocabulary Genesis Actor; actor records exist (blockchain::ENTITY_ACTOR_V0) but no genesis actor is provisioned |
 
 ### Entity Attributes
 
@@ -156,11 +153,11 @@ objects, not a new set. A thing the business talks about, not a data store or ar
 <!-- register:entity_attributes business_language -->
 | Entity | Attribute | Meaning | Evidence Status | Source Finding |
 |--------|-----------|---------|-----------------|----------------|
-| Committed Block | height | the block's position in the chain; genesis is height zero, each commit is the next position | ABSENT | S1 §8.5 |
-| Committed Block | predecessor | the block this one links to; every committed block has exactly one except genesis | ABSENT | S1 §8.5 |
-| Committed Block | signature | the hash of the block content, fixed at commit | ABSENT | S1 §2 Commit |
-| Chain | head | the most recently committed block; the next commit links to it | ABSENT | S1 §2 |
-| BachiCoin | total_supply | fixed at 1,000,000, minted once at genesis, conserved thereafter | OBSERVED | S1 §8.3 |
+| Block | content signature | A hash of the block's content, computed at commit, that uniquely identifies the block. | NOT_FOUND | S1 business_vocabulary Commit |
+| Block | predecessor link | A reference to the single block that precedes this one on the canonical chain (absent only for genesis). | NOT_FOUND | S1 business_invariants #5 |
+| Block | contained transactions | The transactions recorded by the block in its round; they become authoritative on commit. | VERIFIED | S1 business_vocabulary Block; blockchain::ENTITY_BLOCK_V0 |
+| Chain | head | The most recently committed block, against which the next block's predecessor link is checked. | NOT_FOUND | S1 business_invariants #5 |
+| Genesis Block | initial mint transaction | The first system transaction crediting the initial supply to the Genesis Actor. | PARTIAL | S1 known_facts #3; minting exists (blockchain::WF_MINT_V0) but not as a genesis step |
 
 ---
 
@@ -171,8 +168,9 @@ objects, not a new set. A thing the business talks about, not a data store or ar
 <!-- register:business_processes business_language -->
 | Process | Initiator | Outcome | Evidence Status | Source Finding |
 |---------|-----------|---------|-----------------|----------------|
-| Commit a proposed block | the chain, on a proposed block from the consensus loop | the block is recorded on the canonical chain and the committed-block signal is emitted | ABSENT | S1 §3.1; no commit capability exists |
-| Bootstrap genesis | the Genesis Actor, once at startup | the genesis block is written and the initial supply minted, before the consensus loop runs | ABSENT | S1 §3.2; no bootstrap sequence exists |
+| Commit a proposed block to the chain | The consensus loop that produced the proposed block | The block is hashed, linked to its predecessor, and recorded as canonical; the block and its transactions become authoritative and immutable. | NOT_FOUND | S1 requested_outcomes #1; projection absent[COMMIT] |
+| Bootstrap the genesis chain | The one-time system bootstrap, before the consensus loop runs | A genesis block is created and the initial supply is minted to the Genesis Actor, establishing the chain and initial monetary state. | NOT_FOUND | S1 requested_outcomes #2; projection absent[GENESIS], absent[BOOTSTRAP] |
+| Reconcile wallet balances after commit | The chain, after a block is committed | Wallet balances are recomputed from the committed transactions and made consistent with the canonical committed history; balances are derived, not owned as independent state. | PARTIAL | S1 known_facts #11; S1 business_events Balance Reconciled; a balance-reconciled event exists (blockchain::EV_BALANCE_RECONCILED_V0) |
 
 ### Process Steps
 
@@ -181,11 +179,12 @@ objects, not a new set. A thing the business talks about, not a data store or ar
 <!-- register:process_steps business_language -->
 | Process | Step # | Action | Record Produced | Evidence Status | Source Finding |
 |---------|--------|--------|-----------------|-----------------|----------------|
-| Commit a proposed block | 1 | receive the proposed block produced by the consensus loop | the proposed block (consumed) | EXISTING | blockchain::WF_PROPOSE_BLOCK_V0 |
-| Commit a proposed block | 2 | append it to the ledger at the next height, linked to the head, signed by content hash | a committed block | ABSENT | S1 §2 Commit; no ledger store |
-| Commit a proposed block | 3 | emit the committed-block signal | the committed-block event | EXISTING | blockchain::EV_BLOCK_COMMITTED_V0 |
-| Bootstrap genesis | 1 | write the genesis block at height zero | the genesis block | ABSENT | S1 §4.2 |
-| Bootstrap genesis | 2 | mint the initial supply to the Genesis Actor once | the initial minted supply | EXISTING | blockchain::WF_MINT_V0 |
+| Commit a proposed block to the chain | 1 | Check the proposed block's predecessor link matches the current chain head. | A pass/fail predecessor-link check. | NOT_FOUND | S1 business_invariants #5 |
+| Commit a proposed block to the chain | 2 | Hash the block's content to produce its canonical signature. | The block's content signature. | NOT_FOUND | S1 business_vocabulary Commit |
+| Commit a proposed block to the chain | 3 | Append the signed block to the canonical record and advance the chain head. | A new committed block on the ledger and a block-committed event. | PARTIAL | S1 business_events Block Committed; event exists (blockchain::EV_BLOCK_COMMITTED_V0), no producer |
+| Bootstrap the genesis chain | 1 | Create the genesis block containing the initial mint transaction. | The genesis block. | NOT_FOUND | S1 known_facts #3 |
+| Bootstrap the genesis chain | 2 | Mint the fixed initial supply to the Genesis Actor and record it as the first committed block. | The initial supply credited to the Genesis Actor; the chain established at height one. | PARTIAL | S1 known_facts #4; minting exists (blockchain::WF_MINT_V0) but not as genesis |
+| Reconcile wallet balances after commit | 1 | After a block commits, recompute each affected wallet balance from the committed transactions and record the reconciled balance. | Reconciled wallet balances and a balance-reconciled event. | PARTIAL | S1 known_facts #11; a balance-reconciled event exists (blockchain::EV_BALANCE_RECONCILED_V0) |
 
 ---
 
@@ -199,15 +198,15 @@ answer, not a reason to keep searching.*
 <!-- register:belief_verification -->
 | Belief | Result (VERIFIED, NOT_FOUND, INSUFFICIENT_EVIDENCE) | Evidence | Source Finding |
 |--------|------------------------------------------------------|----------|----------------|
-| no capability commits a proposed block to a ledger | VERIFIED | blockchain::EV_BLOCK_COMMITTED_V0 is an orphan event; no commit capability exists | S1 §5.1 |
-| a consensus loop proposes blocks and drives slot processing | VERIFIED | blockchain::WF_PROCESS_SLOT_V0 | S1 §5.2 |
-| a block-proposal capability produces a proposed block | VERIFIED | blockchain::WF_PROPOSE_BLOCK_V0, blockchain::CC_FORM_BLOCK_V0 | S1 §5.3 |
-| a validator registry records validators for proposer selection | VERIFIED | blockchain::WF_REGISTER_VALIDATOR_V0, blockchain::CC_QUERY_ELIGIBLE_VALIDATORS_V0 | S1 §5.4 |
-| a wallet capability records balances and keys | VERIFIED | blockchain::WF_CREATE_WALLET_V0 | S1 §5.5 |
-| a transaction capability exists in the pipeline | VERIFIED | blockchain::WF_SUBMIT_TRANSACTION_V0 | S1 §5.6 |
-| a mempool queues transactions before block formation | VERIFIED | blockchain::CC_CLAIM_MEMPOOL_TXS_V0 | S1 §5.7 |
-| an orchestration subdomain drives slot processing | VERIFIED | blockchain::WF_PROCESS_SLOT_V0 | S1 §5.8 |
-| adjacent subdomains identity, wallet, transaction, mempool, consensus_pos, orchestration exist | VERIFIED | blockchain::WF_CREATE_WALLET_V0, blockchain::WF_SUBMIT_TRANSACTION_V0, blockchain::WF_PROCESS_SLOT_V0 | S1 §5.9 |
+| The current implementation does not yet provide a chain that commits proposed blocks. | VERIFIED | No capability or workflow commits a proposed block; concept COMMIT resolves to 0 artifacts. A block-committed event exists but nothing emits it: blockchain::EV_BLOCK_COMMITTED_V0. | S1 system_beliefs #1; projection absent[COMMIT] |
+| A consensus loop already exists that proposes blocks and drives slot processing. | VERIFIED | blockchain::WF_RUN_CONSENSUS_LOOP_V0, blockchain::WF_RUN_CONSENSUS_SLOTS_V0, blockchain::WF_PROCESS_SLOT_V0 | S1 system_beliefs #2 |
+| A block-proposal capability already exists. | VERIFIED | blockchain::WF_PROPOSE_BLOCK_V0, blockchain::CC_FORM_BLOCK_V0, blockchain::CC_INVOKE_BLOCK_PROPOSAL_V0, blockchain::EV_BLOCK_PROPOSED_V0 | S1 system_beliefs #3 |
+| A validator registry already exists. | VERIFIED | blockchain::WF_REGISTER_VALIDATOR_V0, blockchain::CC_WRITE_VALIDATOR_RECORD_V0, blockchain::CC_QUERY_ELIGIBLE_VALIDATORS_V0, blockchain::CC_SELECT_PROPOSER_V0 | S1 system_beliefs #4 |
+| A wallet capability already exists. | VERIFIED | blockchain::WF_CREATE_WALLET_V0, blockchain::CC_CREATE_WALLET_RECORD_V0, blockchain::ENTITY_WALLET_V0 | S1 system_beliefs #5 |
+| A transaction capability already exists. | VERIFIED | blockchain::WF_SUBMIT_TRANSACTION_V0, blockchain::ENTITY_TRANSACTION_V0, blockchain::CC_SIGN_TRANSACTION_V0, blockchain::CC_HASH_TRANSACTION_V0 | S1 system_beliefs #6 |
+| A mempool already exists. | VERIFIED | blockchain::CC_WRITE_MEMPOOL_TX_V0, blockchain::CC_QUERY_MEMPOOL_TXS_V0, blockchain::CC_DRAIN_MEMPOOL_V0, blockchain::CC_CLAIM_MEMPOOL_TXS_V0 | S1 system_beliefs #7 |
+| An orchestration subdomain already exists. | VERIFIED | blockchain::WF_RUN_CHAIN_SIMULATION_V0, blockchain::CC_RUN_SLOT_SEQUENCE_V0, blockchain::STRUCTURE_BLOCKCHAIN_ORCHESTRATION_STORAGE_V0 | S1 system_beliefs #8 |
+| Adjacent subdomains exist: identity, wallet, transaction, mempool, consensus, orchestration. | VERIFIED | identity via blockchain::ENTITY_ACTOR_V0; wallet via blockchain::ENTITY_WALLET_V0; transaction via blockchain::ENTITY_TRANSACTION_V0; mempool via blockchain::CC_WRITE_MEMPOOL_TX_V0; consensus via blockchain::WF_RUN_CONSENSUS_LOOP_V0; orchestration via blockchain::WF_RUN_CHAIN_SIMULATION_V0 | S1 system_beliefs #9 |
 
 ---
 
@@ -221,12 +220,14 @@ observation of how well it matches the need — NOT a reuse decision; that is St
 <!-- register:pps_baseline_fqdns -->
 | Capability | FQDN | What It Does | Fit (EXACT, PARTIAL, MISMATCH) | Cannot Do |
 |-----------|------|--------------|--------------------------------|-----------|
-| form a proposed block | blockchain::CC_FORM_BLOCK_V0 | forms a block from mempool transactions in the consensus loop | PARTIAL | does not commit or record the block to a ledger |
-| propose a block | blockchain::WF_PROPOSE_BLOCK_V0 | the upstream workflow that produces a proposed block | PARTIAL | stops at proposal; no commit |
-| mint supply | blockchain::WF_MINT_V0 | mints supply under the mint policy | PARTIAL | not sequenced as a one-time genesis bootstrap |
-| signal a committed block | blockchain::EV_BLOCK_COMMITTED_V0 | the committed-block event | EXACT | no producer today (orphan) |
-| drain mempool transactions | blockchain::CC_CLAIM_MEMPOOL_TXS_V0 | claims queued transactions for a block | PARTIAL | not chain-specific |
-| drive slot processing | blockchain::WF_PROCESS_SLOT_V0 | the consensus loop that drives rounds | PARTIAL | does not commit blocks |
+| Propose a block from the consensus loop | blockchain::WF_PROPOSE_BLOCK_V0 | Selects a proposer, drains the mempool, and forms a proposed block in a round. | PARTIAL | Does not commit the proposed block to a canonical ledger. |
+| Block entity schema | blockchain::ENTITY_BLOCK_V0 | Defines the block record the chain commits. | EXACT | Schema only; carries no commit or predecessor-link behaviour. |
+| Form a block from claimed mempool transactions | blockchain::CC_FORM_BLOCK_V0 | Assembles a proposed block from claimed transactions. | PARTIAL | Produces a proposed block; does not record it as canonical. |
+| Block proposed event | blockchain::EV_BLOCK_PROPOSED_V0 | Marks that a candidate block exists. | EXACT | Observation only; not the commit trigger. |
+| Block committed event | blockchain::EV_BLOCK_COMMITTED_V0 | Declares that a block became canonical. | PARTIAL | Declared but unemitted — no capability produces it today. |
+| Mint supply | blockchain::WF_MINT_V0 | Mints value under a mint policy. | PARTIAL | Not wired as a one-time genesis bootstrap step before the consensus loop. |
+| Consensus loop driver | blockchain::WF_RUN_CONSENSUS_LOOP_V0 | Drives slot processing and block proposal. | PARTIAL | Produces proposals; has no downstream commit-to-chain step. |
+| Orchestration storage structure | blockchain::STRUCTURE_BLOCKCHAIN_ORCHESTRATION_STORAGE_V0 | Declares the orchestration subdomain's storage. | PARTIAL | Does not declare a chain/ledger store. |
 
 ---
 
@@ -237,9 +238,10 @@ observation of how well it matches the need — NOT a reuse decision; that is St
 <!-- register:gaps business_language -->
 | Gap | Severity | Impact | Evidence Status | Source Finding |
 |-----|----------|--------|-----------------|----------------|
-| no capability commits a proposed block to a canonical ledger | CRITICAL | the core outcome of this CR cannot be met | ABSENT | S1 §5.1; blockchain::EV_BLOCK_COMMITTED_V0 orphan |
-| no one-time genesis bootstrap sequence exists to write the genesis block and mint the initial supply | CRITICAL | the chain cannot be established or its supply seeded | ABSENT | S1 §3.2, §4.2 |
-| no canonical ledger store owns committed history | CRITICAL | committed blocks have nowhere authoritative to live | ABSENT | S1 §2 Chain |
+| No capability commits a proposed block to a canonical chain. | HIGH | The core requested outcome — an authoritative ledger of committed blocks — cannot be met; proposed blocks have nowhere to become canonical. | NOT_FOUND | S1 requested_outcomes #1; projection absent[COMMIT] |
+| No canonical chain store exists to hold committed blocks and track the chain head. | HIGH | There is no durable, append-only record for committed history. | NOT_FOUND | S1 known_facts #1 |
+| No genesis bootstrap capability creates the first block and mints the initial supply before consensus runs. | HIGH | The chain cannot be initialised with its fixed initial supply and Genesis Actor. | NOT_FOUND | S1 requested_outcomes #2; projection absent[GENESIS], absent[BOOTSTRAP] |
+| No predecessor-link validation guards commit, so nothing enforces one predecessor per committed block. | MEDIUM | Without it the immutability and single-predecessor invariants cannot be upheld at commit. | NOT_FOUND | S1 business_invariants #5, #6 |
 
 ---
 
@@ -252,8 +254,10 @@ E.g. "a validator lifecycle already exists", "no canonical chain storage was fou
 <!-- register:architectural_observations business_language -->
 | Observation | Evidence | Evidence Status | Source Finding |
 |-------------|----------|-----------------|----------------|
-| the committed-block event exists with no producer — the design intent for a commit capability is already latent in the snapshot | blockchain::EV_BLOCK_COMMITTED_V0 | OBSERVED | S1 §5.1 |
-| block proposal and consensus are owned by consensus_pos; the chain is a distinct downstream consumer | blockchain::WF_PROPOSE_BLOCK_V0, blockchain::WF_PROCESS_SLOT_V0 | OBSERVED | S1 §11 |
+| The system already produces proposed blocks through a consensus loop but has no ledger to record them, so the chain plugs in directly downstream of proposal. | blockchain::WF_PROPOSE_BLOCK_V0, blockchain::CC_FORM_BLOCK_V0 | VERIFIED | S1 system_beliefs #2, #3 |
+| A block-committed event is already declared but nothing emits it, indicating a commit path was anticipated in the design and left unbuilt. | blockchain::EV_BLOCK_COMMITTED_V0 | VERIFIED | S1 business_events Block Committed |
+| Minting already exists and can serve the genesis supply, so bootstrap reuses minting rather than introducing a new monetary mechanism. | blockchain::WF_MINT_V0, blockchain::CC_VALIDATE_MINT_POLICY_V0 | VERIFIED | S1 known_facts #3, #5 |
+| Wallet balances are not chain-owned state; they are derived from committed transactions and reconciled on-chain after commit, and a balance-reconciled event already exists to carry that moment. | blockchain::EV_BALANCE_RECONCILED_V0 | VERIFIED | S1 known_facts #11; S1 authority_boundaries Wallet Balance |
 
 ---
 
@@ -266,7 +270,7 @@ MAJOR | MINOR.*
 <!-- register:discovery_concerns business_language -->
 | Concern | Evidence | Severity | Evidence Status | Source Finding |
 |---------|----------|----------|-----------------|----------------|
-| the mint policy must be invoked exactly once at genesis to preserve the closed-supply invariant | blockchain::WF_MINT_V0 | MEDIUM | OBSERVED | S1 §8.3 |
+| The block-committed event exists with no producer, so its intended payload and emitter are unknown and must be settled when the commit path is designed. | blockchain::EV_BLOCK_COMMITTED_V0 | MEDIUM | VERIFIED | S1 business_events Block Committed |
 
 ---
 
@@ -279,8 +283,7 @@ business | governance | identity | workflow | storage | policy | unknown.*
 <!-- register:open_questions business_language optional -->
 | Question | Category | Why It Matters | Source Finding |
 |----------|----------|----------------|----------------|
-| should the new commit capability emit the existing committed-block event or a new one? | reuse | a duplicate event would fork the committed signal | blockchain::EV_BLOCK_COMMITTED_V0 |
-| should genesis bootstrap invoke the existing mint policy or author its own? | reuse | a second minting path would break the single-supply invariant | blockchain::WF_MINT_V0 |
+| What fields must the block-committed event carry to be useful to downstream subdomains? | GOVERNANCE | The event already exists but is unemitted; its payload shapes how other subdomains observe committed history. | S1 business_events Block Committed |
 
 ---
 

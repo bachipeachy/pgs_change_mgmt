@@ -1,0 +1,170 @@
+{
+  "scope_boundary": [
+    {
+      "capability": "Commit a proposed block to the canonical chain",
+      "status": "IN_SCOPE",
+      "notes": "the core outcome \u2014 proposed blocks become canonical",
+      "source_finding": "S4 capability_graph GAP-1"
+    },
+    {
+      "capability": "Store the canonical chain ledger and track its head",
+      "status": "IN_SCOPE",
+      "notes": "append-only record of committed blocks",
+      "source_finding": "S4 capability_graph GAP-2"
+    },
+    {
+      "capability": "Bootstrap the genesis chain and initialise the supply",
+      "status": "IN_SCOPE",
+      "notes": "one-time, before the consensus loop runs",
+      "source_finding": "S4 capability_graph GAP-5"
+    },
+    {
+      "capability": "Reconcile wallet balances after commit",
+      "status": "IN_SCOPE",
+      "notes": "balances derived from committed transactions",
+      "source_finding": "S4 capability_graph GAP-6"
+    },
+    {
+      "capability": "Attest proposed blocks",
+      "status": "DEFERRED",
+      "notes": "deferred to a future increment",
+      "source_finding": "S1 out_of_scope attest"
+    },
+    {
+      "capability": "Finalize committed blocks",
+      "status": "DEFERRED",
+      "notes": "deferred; blocks committed directly",
+      "source_finding": "S1 out_of_scope finalize"
+    },
+    {
+      "capability": "Resolve forks and chain reorganizations",
+      "status": "DEFERRED",
+      "notes": "not this release; committed history is immutable",
+      "source_finding": "S1 out_of_scope fork/reorg"
+    },
+    {
+      "capability": "Slash or reward validators",
+      "status": "DEFERRED",
+      "notes": "validator penalties/rewards out of scope",
+      "source_finding": "S1 out_of_scope slashing/rewards"
+    }
+  ],
+  "invariants": [
+    {
+      "invariant": "A committed block is immutable \u2014 it never changes or disappears.",
+      "business_reason": "Committed history must be a permanent, reliable record other subdomains can trust.",
+      "source_finding": "S1 business_invariants #4"
+    },
+    {
+      "invariant": "Every committed block has exactly one predecessor, except the genesis block.",
+      "business_reason": "The chain is a single, ordered history with one origin.",
+      "source_finding": "S1 business_invariants #5"
+    },
+    {
+      "invariant": "A block cannot be committed twice.",
+      "business_reason": "Prevents duplication or replay of committed history.",
+      "source_finding": "S1 business_invariants #6"
+    },
+    {
+      "invariant": "Exactly one genesis block exists per chain, and genesis executes exactly once.",
+      "business_reason": "The chain has a single, permanent origin and initial state.",
+      "source_finding": "S1 business_invariants #1, #2"
+    },
+    {
+      "invariant": "Total supply is conserved at 1,000,000 BachiCoin after genesis.",
+      "business_reason": "The monetary system is closed \u2014 no supply enters or leaves except by the system's rules.",
+      "source_finding": "S1 business_invariants #3"
+    },
+    {
+      "invariant": "A proposed block is not authoritative until committed.",
+      "business_reason": "The chain is the sole authority for committed history.",
+      "source_finding": "S1 business_invariants #7"
+    },
+    {
+      "invariant": "Wallet balances are derived from committed transactions, not owned by the chain as independent state.",
+      "business_reason": "Balances must always be consistent with the canonical committed history.",
+      "source_finding": "S1 known_facts #11 (human decision)"
+    }
+  ],
+  "actions": [
+    {
+      "action": "Commit",
+      "object": "a proposed block",
+      "trigger": "the consensus loop produces a proposed block",
+      "status": "IN_SCOPE",
+      "source_finding": "S4 relationships Chain commits Proposed Block"
+    },
+    {
+      "action": "Bootstrap",
+      "object": "the genesis chain",
+      "trigger": "system initialisation, once, before the consensus loop runs",
+      "status": "IN_SCOPE",
+      "source_finding": "S4 relationships Bootstrap creates Genesis Block"
+    },
+    {
+      "action": "Attest",
+      "object": "a proposed block",
+      "trigger": "deferred this increment",
+      "status": "DEFERRED",
+      "source_finding": "S1 out_of_scope attest"
+    },
+    {
+      "action": "Finalize",
+      "object": "a committed block",
+      "trigger": "deferred this increment",
+      "status": "DEFERRED",
+      "source_finding": "S1 out_of_scope finalize"
+    }
+  ],
+  "provisional_codes": [
+    {
+      "provisional_code": "IN_COMMIT_BLOCK_V0",
+      "family": "IN",
+      "summary": "Admit a request to commit a proposed block to the canonical chain.",
+      "source_finding": "S5 actions Commit"
+    },
+    {
+      "provisional_code": "WF_COMMIT_BLOCK_V0",
+      "family": "WF",
+      "summary": "Commit a proposed block: validate its predecessor link, sign it, record it as canonical, and reconcile balances.",
+      "source_finding": "S5 actions Commit"
+    },
+    {
+      "provisional_code": "IN_BOOTSTRAP_GENESIS_CHAIN_V0",
+      "family": "IN",
+      "summary": "Admit a request to bootstrap the genesis chain and initialise the supply.",
+      "source_finding": "S5 actions Bootstrap"
+    },
+    {
+      "provisional_code": "WF_BOOTSTRAP_GENESIS_CHAIN_V0",
+      "family": "WF",
+      "summary": "Bootstrap the genesis chain: create the genesis block and initialise the fixed supply before consensus runs.",
+      "source_finding": "S5 actions Bootstrap"
+    },
+    {
+      "provisional_code": "CC_COMMIT_BLOCK_CANONICAL_V0",
+      "family": "CC",
+      "summary": "Record a validated, signed proposed block as canonical on the chain and announce it committed.",
+      "source_finding": "S4 gap_register GAP-1"
+    },
+    {
+      "provisional_code": "CC_VALIDATE_PREDECESSOR_LINK_V0",
+      "family": "CC",
+      "summary": "Check that a proposed block's predecessor link matches the current chain head before commit.",
+      "source_finding": "S4 gap_register GAP-3"
+    },
+    {
+      "provisional_code": "CC_CREATE_GENESIS_BLOCK_V0",
+      "family": "CC",
+      "summary": "Create the genesis block containing the initial mint and record it as the first committed block.",
+      "source_finding": "S4 gap_register GAP-5"
+    },
+    {
+      "provisional_code": "CC_RECONCILE_BALANCES_V0",
+      "family": "CC",
+      "summary": "Reconcile wallet balances from the committed transactions after a block commits.",
+      "source_finding": "S4 gap_register GAP-6"
+    }
+  ],
+  "cross_subdomain_refs": []
+}

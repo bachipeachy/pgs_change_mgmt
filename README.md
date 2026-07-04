@@ -103,7 +103,7 @@ are *projections* of it, not independent re-derivations.
 Two consequences make the pipeline pleasant to operate:
 
 1. **Loose coupling.** Stages are joined only by these declared field handoffs, each **persisted to
-   disk** (`dossiers/[domain]/[subdomain]/_handoff/<stage>.json`). A stage never re-reads the whole
+   disk** (`dossiers/[domain]/[subdomain]/cr_ir/<stage>.json`). A stage never re-reads the whole
    history — only its declared upstream projections.
 2. **Start (or resume) at any stage.** Because the handoffs are on disk, you can run a single stage
    on its own — `--stage 6b` — as long as its declared upstream handoffs exist. This lets you:
@@ -230,7 +230,7 @@ change_mgmt/dossiers/[domain]/[subdomain]/
   6b_design_intent_[subdomain]_v0.md
   7_authoring_mandate_[subdomain]_v0.md
   8_authoring_manifest_[subdomain]_v0.md    ← produced after authoring closes
-  _handoff/<stage>.json                      ← the bounded gov_projection per stage
+  cr_ir/<stage>.json                         ← the bounded gov_projection per stage
 ```
 
 The stage-template set under `change_mgmt/templates/` uses the same stage-number prefixes

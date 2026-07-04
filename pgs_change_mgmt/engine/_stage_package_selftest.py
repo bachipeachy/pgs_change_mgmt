@@ -97,7 +97,7 @@ def main() -> int:
 
         # ---- S2 (consumes the S1 handoff fixture) ------------------------------------------
         print("S2 — consumes S1 handoff fixture")
-        handoff_dir = cfg.output_dir / "_handoff"
+        handoff_dir = cfg.output_dir / "cr_ir"
         handoff_dir.mkdir(parents=True, exist_ok=True)
         (handoff_dir / "1.json").write_text(json.dumps(_S1_HANDOFF_FIXTURE, indent=2))
 

@@ -4,7 +4,7 @@
 **Version:** V0  
 **Status:** DRAFT  
 **Pipeline Stage:** Stage 8 — Build Sheet Set  
-**Governed By:** CONSTITUTION_BUILD_SHEET_V0  
+**Governed By:** fb.change_mgmt::CONSTITUTION_CONSTRUCTION_V0  
 **Source Mandate:** 7_authoring_mandate_[subdomain]_v0.md (Gate 2: [APPROVED|PENDING])  
 **Set Readiness:** DESIGNED | BUILDABLE | CONSTRUCTION-CLOSED  
 
@@ -41,6 +41,10 @@ INVALID OUTPUT:
 ## Construction Readiness — oracles + ladder
 
 Ladder (monotonic): `DESIGNED → BUILDABLE → CONSTRUCTION_READY → CONSTRUCTION_CLOSED → IMPLEMENTED → RUNTIME_VALIDATED`.
+
+> **Authority note:** `CONSTITUTION_CONSTRUCTION_V0` governs this ladder only through `CONSTRUCTION_CLOSED`.
+> The tail `IMPLEMENTED → RUNTIME_VALIDATED` is runtime-lifecycle, governed downstream by
+> `fb.topology::CONSTITUTION_EXECUTION_V0` / `CONSTITUTION_TRACE_EXECUTION_V0` — shown here only for continuity.
 
 **Static gate → `CONSTRUCTION_READY`** (everything required exists): three statically-checkable asserts:
 

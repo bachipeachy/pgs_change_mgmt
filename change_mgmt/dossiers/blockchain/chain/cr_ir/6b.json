@@ -1,0 +1,400 @@
+{
+  "existing_inventory": [
+    {
+      "fqdn": "blockchain::ENTITY_BLOCK_V0",
+      "action": "REUSE",
+      "reason": "The committed block record schema.",
+      "source_finding": "S3 authoring_decisions REUSE"
+    },
+    {
+      "fqdn": "blockchain::EV_BLOCK_COMMITTED_V0",
+      "action": "REUSE",
+      "reason": "Emitted by the commit capability.",
+      "source_finding": "S3 authoring_decisions REUSE"
+    },
+    {
+      "fqdn": "blockchain::EV_BALANCE_RECONCILED_V0",
+      "action": "REUSE",
+      "reason": "Emitted by the reconciliation capability.",
+      "source_finding": "S3 authoring_decisions REUSE"
+    },
+    {
+      "fqdn": "blockchain::WF_PROPOSE_BLOCK_V0",
+      "action": "REUSE",
+      "reason": "Upstream producer of the proposed block the chain commits.",
+      "source_finding": "S3 dependency_discoveries EXISTING"
+    },
+    {
+      "fqdn": "capability_transforms::CT_PURE_KECCAK256_HASH_V0",
+      "action": "REUSE",
+      "reason": "The generic hash primitive reused inside the block-content hash transform.",
+      "source_finding": "S3 analysis_findings Q2"
+    },
+    {
+      "fqdn": "capability_side_effects::CS_MUTABLE_JSON_V0",
+      "action": "REUSE",
+      "reason": "The mutable substrate for the head-pointer store (READ/WRITE).",
+      "source_finding": "S4 gap_register GAP-2"
+    },
+    {
+      "fqdn": "capability_side_effects::CS_APPENDONLY_JSONL_V0",
+      "action": "REUSE",
+      "reason": "The append-only substrate for the committed block log (APPEND/GET_ALL).",
+      "source_finding": "S4 gap_register GAP-2"
+    },
+    {
+      "fqdn": "blockchain::CC_VALIDATE_MINT_POLICY_V0",
+      "action": "REVIEW",
+      "reason": "The genesis mint conforms to the existing mint policy; genesis constructs the mint directly in the block rather than via the mempool mint workflow.",
+      "source_finding": "design_resolution genesis mint"
+    },
+    {
+      "fqdn": "blockchain::WF_MINT_V0",
+      "action": "REVIEW",
+      "reason": "Mempool-based mint workflow; not reused for pre-consensus genesis (see design_resolution).",
+      "source_finding": "design_resolution genesis mint"
+    }
+  ],
+  "new_artifacts": [
+    {
+      "capability": "Admit a request to commit a proposed block",
+      "family": "IN",
+      "code": "blockchain::IN_COMMIT_BLOCK_V0",
+      "owner_subdomain": "chain",
+      "status": "NEW",
+      "source_finding": "S5 provisional_codes; S6 governance_outcome"
+    },
+    {
+      "capability": "Commit a proposed block to the canonical chain",
+      "family": "WF",
+      "code": "blockchain::WF_COMMIT_BLOCK_V0",
+      "owner_subdomain": "chain",
+      "status": "NEW",
+      "source_finding": "S5 actions Commit"
+    },
+    {
+      "capability": "Validate a block's predecessor link before commit",
+      "family": "CC",
+      "code": "blockchain::CC_VALIDATE_PREDECESSOR_LINK_V0",
+      "owner_subdomain": "chain",
+      "status": "NEW",
+      "source_finding": "S4 gap_register GAP-3"
+    },
+    {
+      "capability": "Record a validated block as canonical on the chain",
+      "family": "CC",
+      "code": "blockchain::CC_COMMIT_BLOCK_CANONICAL_V0",
+      "owner_subdomain": "chain",
+      "status": "NEW",
+      "source_finding": "S4 gap_register GAP-1"
+    },
+    {
+      "capability": "Reconcile wallet balances after commit and announce them",
+      "family": "CC",
+      "code": "blockchain::CC_RECONCILE_BALANCES_V0",
+      "owner_subdomain": "chain",
+      "status": "NEW",
+      "source_finding": "S4 gap_register GAP-6"
+    },
+    {
+      "capability": "Admit a request to bootstrap the genesis chain",
+      "family": "IN",
+      "code": "blockchain::IN_BOOTSTRAP_GENESIS_CHAIN_V0",
+      "owner_subdomain": "chain",
+      "status": "NEW",
+      "source_finding": "S5 provisional_codes"
+    },
+    {
+      "capability": "Bootstrap the genesis chain and initialise the supply",
+      "family": "WF",
+      "code": "blockchain::WF_BOOTSTRAP_GENESIS_CHAIN_V0",
+      "owner_subdomain": "chain",
+      "status": "NEW",
+      "source_finding": "S5 actions Bootstrap"
+    },
+    {
+      "capability": "Create the genesis block and record it as the first committed block",
+      "family": "CC",
+      "code": "blockchain::CC_CREATE_GENESIS_BLOCK_V0",
+      "owner_subdomain": "chain",
+      "status": "NEW",
+      "source_finding": "S4 gap_register GAP-5"
+    },
+    {
+      "capability": "Compute a block's content signature",
+      "family": "CT",
+      "code": "blockchain::CT_PURE_HASH_BLOCK_V0",
+      "owner_subdomain": "chain",
+      "status": "NEW",
+      "source_finding": "S4 gap_register GAP-4"
+    },
+    {
+      "capability": "Extract a block's predecessor hash",
+      "family": "CT",
+      "code": "blockchain::CT_PURE_EXTRACT_PREDECESSOR_HASH_V0",
+      "owner_subdomain": "chain",
+      "status": "NEW",
+      "source_finding": "S4 gap_register GAP-3"
+    },
+    {
+      "capability": "Derive wallet balances from committed transactions",
+      "family": "CT",
+      "code": "blockchain::CT_PURE_DERIVE_BALANCES_V0",
+      "owner_subdomain": "chain",
+      "status": "NEW",
+      "source_finding": "S4 gap_register GAP-6"
+    },
+    {
+      "capability": "Compare two values for equality",
+      "family": "CT",
+      "code": "capability_transforms::CT_PURE_COMPARE_EQUAL_V0",
+      "owner_subdomain": "capability_transforms",
+      "status": "NEW",
+      "source_finding": "S4 gap_register GAP-3 (shared primitive)"
+    },
+    {
+      "capability": "Announce that the genesis chain was created",
+      "family": "EV",
+      "code": "blockchain::EV_GENESIS_CREATED_V0",
+      "owner_subdomain": "chain",
+      "status": "NEW",
+      "source_finding": "S1 business_events Genesis Created"
+    },
+    {
+      "capability": "Declare the chain storage (block log and head pointer)",
+      "family": "STRUCTURE",
+      "code": "blockchain::STRUCTURE_CHAIN_STORAGE_V0",
+      "owner_subdomain": "chain",
+      "status": "NEW",
+      "source_finding": "S4 gap_register GAP-2; S6 storage_governance"
+    },
+    {
+      "capability": "Bind the commit workflow to its stores",
+      "family": "RB",
+      "code": "blockchain::RB_COMMIT_BLOCK_V0",
+      "owner_subdomain": "chain",
+      "status": "NEW",
+      "source_finding": "S6 governance_outcome"
+    },
+    {
+      "capability": "Bind the genesis workflow to its stores",
+      "family": "RB",
+      "code": "blockchain::RB_BOOTSTRAP_GENESIS_CHAIN_V0",
+      "owner_subdomain": "chain",
+      "status": "NEW",
+      "source_finding": "S6 governance_outcome"
+    }
+  ],
+  "rb_declarations": [
+    {
+      "rb_code": "blockchain::RB_COMMIT_BLOCK_V0",
+      "binds_wf": "blockchain::WF_COMMIT_BLOCK_V0",
+      "cs_bindings": "capability_side_effects::CS_APPENDONLY_JSONL_V0, capability_side_effects::CS_MUTABLE_JSON_V0",
+      "storage_structure": "blockchain::STRUCTURE_CHAIN_STORAGE_V0",
+      "source_finding": "S6 governance_outcome"
+    },
+    {
+      "rb_code": "blockchain::RB_BOOTSTRAP_GENESIS_CHAIN_V0",
+      "binds_wf": "blockchain::WF_BOOTSTRAP_GENESIS_CHAIN_V0",
+      "cs_bindings": "capability_side_effects::CS_APPENDONLY_JSONL_V0, capability_side_effects::CS_MUTABLE_JSON_V0",
+      "storage_structure": "blockchain::STRUCTURE_CHAIN_STORAGE_V0",
+      "source_finding": "S6 governance_outcome"
+    }
+  ],
+  "execution_topology": [
+    {
+      "workflow": "blockchain::WF_COMMIT_BLOCK_V0",
+      "node": "blockchain::IN_COMMIT_BLOCK_V0",
+      "node_type": "IN",
+      "routing": "SUCCESS -> blockchain::CC_VALIDATE_PREDECESSOR_LINK_V0",
+      "source_finding": "S5 actions Commit"
+    },
+    {
+      "workflow": "blockchain::WF_COMMIT_BLOCK_V0",
+      "node": "blockchain::CC_VALIDATE_PREDECESSOR_LINK_V0",
+      "node_type": "CC",
+      "routing": "SUCCESS -> blockchain::CC_COMMIT_BLOCK_CANONICAL_V0, VIOLATION -> EXIT",
+      "source_finding": "S4 gap_register GAP-3"
+    },
+    {
+      "workflow": "blockchain::WF_COMMIT_BLOCK_V0",
+      "node": "blockchain::CC_COMMIT_BLOCK_CANONICAL_V0",
+      "node_type": "CC",
+      "routing": "SUCCESS -> blockchain::CC_RECONCILE_BALANCES_V0",
+      "source_finding": "S4 gap_register GAP-1"
+    },
+    {
+      "workflow": "blockchain::WF_COMMIT_BLOCK_V0",
+      "node": "blockchain::CC_RECONCILE_BALANCES_V0",
+      "node_type": "CC",
+      "routing": "SUCCESS -> EXIT_SUCCESS",
+      "source_finding": "S4 gap_register GAP-6"
+    },
+    {
+      "workflow": "blockchain::WF_COMMIT_BLOCK_V0",
+      "node": "EXIT_SUCCESS",
+      "node_type": "EXIT_SUCCESS",
+      "routing": "",
+      "source_finding": "S5 actions Commit"
+    },
+    {
+      "workflow": "blockchain::WF_COMMIT_BLOCK_V0",
+      "node": "EXIT",
+      "node_type": "EXIT",
+      "routing": "",
+      "source_finding": "S1 business_invariants #5 (predecessor mismatch rejected)"
+    },
+    {
+      "workflow": "blockchain::WF_BOOTSTRAP_GENESIS_CHAIN_V0",
+      "node": "blockchain::IN_BOOTSTRAP_GENESIS_CHAIN_V0",
+      "node_type": "IN",
+      "routing": "SUCCESS -> blockchain::CC_CREATE_GENESIS_BLOCK_V0",
+      "source_finding": "S5 actions Bootstrap"
+    },
+    {
+      "workflow": "blockchain::WF_BOOTSTRAP_GENESIS_CHAIN_V0",
+      "node": "blockchain::CC_CREATE_GENESIS_BLOCK_V0",
+      "node_type": "CC",
+      "routing": "SUCCESS -> EXIT_SUCCESS",
+      "source_finding": "S4 gap_register GAP-5"
+    },
+    {
+      "workflow": "blockchain::WF_BOOTSTRAP_GENESIS_CHAIN_V0",
+      "node": "EXIT_SUCCESS",
+      "node_type": "EXIT_SUCCESS",
+      "routing": "",
+      "source_finding": "S5 actions Bootstrap"
+    }
+  ],
+  "cc_composition": [
+    {
+      "cc_code": "blockchain::CC_VALIDATE_PREDECESSOR_LINK_V0",
+      "step": "1",
+      "capability": "capability_side_effects::CS_MUTABLE_JSON_V0",
+      "kind": "CS",
+      "operation": "READ",
+      "consumes": "",
+      "produces": "current_head"
+    },
+    {
+      "cc_code": "blockchain::CC_VALIDATE_PREDECESSOR_LINK_V0",
+      "step": "2",
+      "capability": "blockchain::CT_PURE_EXTRACT_PREDECESSOR_HASH_V0",
+      "kind": "CT",
+      "operation": "COMPUTE",
+      "consumes": "proposed_block",
+      "produces": "predecessor_hash"
+    },
+    {
+      "cc_code": "blockchain::CC_VALIDATE_PREDECESSOR_LINK_V0",
+      "step": "3",
+      "capability": "capability_transforms::CT_PURE_COMPARE_EQUAL_V0",
+      "kind": "CT",
+      "operation": "COMPUTE",
+      "consumes": "predecessor_hash, current_head",
+      "produces": "is_match"
+    },
+    {
+      "cc_code": "blockchain::CC_COMMIT_BLOCK_CANONICAL_V0",
+      "step": "1",
+      "capability": "blockchain::CT_PURE_HASH_BLOCK_V0",
+      "kind": "CT",
+      "operation": "COMPUTE",
+      "consumes": "proposed_block",
+      "produces": "content_hash"
+    },
+    {
+      "cc_code": "blockchain::CC_COMMIT_BLOCK_CANONICAL_V0",
+      "step": "2",
+      "capability": "capability_side_effects::CS_APPENDONLY_JSONL_V0",
+      "kind": "CS",
+      "operation": "APPEND",
+      "consumes": "proposed_block, content_hash",
+      "produces": "committed_block"
+    },
+    {
+      "cc_code": "blockchain::CC_COMMIT_BLOCK_CANONICAL_V0",
+      "step": "3",
+      "capability": "capability_side_effects::CS_MUTABLE_JSON_V0",
+      "kind": "CS",
+      "operation": "WRITE",
+      "consumes": "content_hash",
+      "produces": "updated_head"
+    },
+    {
+      "cc_code": "blockchain::CC_CREATE_GENESIS_BLOCK_V0",
+      "step": "1",
+      "capability": "blockchain::CT_PURE_HASH_BLOCK_V0",
+      "kind": "CT",
+      "operation": "COMPUTE",
+      "consumes": "genesis_block_content",
+      "produces": "content_hash"
+    },
+    {
+      "cc_code": "blockchain::CC_CREATE_GENESIS_BLOCK_V0",
+      "step": "2",
+      "capability": "capability_side_effects::CS_APPENDONLY_JSONL_V0",
+      "kind": "CS",
+      "operation": "APPEND",
+      "consumes": "genesis_block_content, content_hash",
+      "produces": "genesis_block"
+    },
+    {
+      "cc_code": "blockchain::CC_CREATE_GENESIS_BLOCK_V0",
+      "step": "3",
+      "capability": "capability_side_effects::CS_MUTABLE_JSON_V0",
+      "kind": "CS",
+      "operation": "WRITE",
+      "consumes": "content_hash",
+      "produces": "head"
+    },
+    {
+      "cc_code": "blockchain::CC_RECONCILE_BALANCES_V0",
+      "step": "1",
+      "capability": "capability_side_effects::CS_APPENDONLY_JSONL_V0",
+      "kind": "CS",
+      "operation": "GET_ALL",
+      "consumes": "",
+      "produces": "committed_history"
+    },
+    {
+      "cc_code": "blockchain::CC_RECONCILE_BALANCES_V0",
+      "step": "2",
+      "capability": "blockchain::CT_PURE_DERIVE_BALANCES_V0",
+      "kind": "CT",
+      "operation": "COMPUTE",
+      "consumes": "committed_history",
+      "produces": "reconciled_balances"
+    }
+  ],
+  "structure_stores": [
+    {
+      "store_name": "chain",
+      "storage_type": "CS_APPENDONLY_JSONL_V0",
+      "proposed_path": "{module_data_root}/blockchain/chain/chain.jsonl",
+      "used_by": "blockchain::CC_COMMIT_BLOCK_CANONICAL_V0, blockchain::CC_CREATE_GENESIS_BLOCK_V0, blockchain::CC_RECONCILE_BALANCES_V0",
+      "source_finding": "S4 gap_register GAP-2"
+    },
+    {
+      "store_name": "chain_head",
+      "storage_type": "CS_MUTABLE_JSON_V0",
+      "proposed_path": "{module_data_root}/blockchain/chain/chain_head.json",
+      "used_by": "blockchain::CC_COMMIT_BLOCK_CANONICAL_V0, blockchain::CC_CREATE_GENESIS_BLOCK_V0, blockchain::CC_VALIDATE_PREDECESSOR_LINK_V0",
+      "source_finding": "S5 identity_semantics; S1 business_invariants #5"
+    }
+  ],
+  "artifact_summary": [
+    {
+      "action": "NEW",
+      "subdomain": "chain",
+      "count": "15",
+      "artifacts": "blockchain::IN_COMMIT_BLOCK_V0, blockchain::WF_COMMIT_BLOCK_V0, blockchain::CC_VALIDATE_PREDECESSOR_LINK_V0, blockchain::CC_COMMIT_BLOCK_CANONICAL_V0, blockchain::CC_RECONCILE_BALANCES_V0, blockchain::IN_BOOTSTRAP_GENESIS_CHAIN_V0, blockchain::WF_BOOTSTRAP_GENESIS_CHAIN_V0, blockchain::CC_CREATE_GENESIS_BLOCK_V0, blockchain::CT_PURE_HASH_BLOCK_V0, blockchain::CT_PURE_EXTRACT_PREDECESSOR_HASH_V0, blockchain::CT_PURE_DERIVE_BALANCES_V0, blockchain::EV_GENESIS_CREATED_V0, blockchain::STRUCTURE_CHAIN_STORAGE_V0, blockchain::RB_COMMIT_BLOCK_V0, blockchain::RB_BOOTSTRAP_GENESIS_CHAIN_V0"
+    },
+    {
+      "action": "NEW",
+      "subdomain": "capability_transforms",
+      "count": "1",
+      "artifacts": "capability_transforms::CT_PURE_COMPARE_EQUAL_V0"
+    }
+  ]
+}

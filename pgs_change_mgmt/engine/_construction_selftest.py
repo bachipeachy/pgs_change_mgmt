@@ -10,12 +10,11 @@ from __future__ import annotations
 import re
 from pathlib import Path
 
+from ._fixture import chain_dossier
 from .build_sheet import project_build_sheets, load_registers
 from ..worker.construction import transcribe, build_prompt, CONSTRUCTOR_SYSTEM
 from ..evaluator.invention_oracle import sheet_codes, structural_invention, text_invention
 from ..evaluator.construction_oracle import evaluate_build
-
-CHAIN = Path(__file__).resolve().parents[2] / "change_mgmt" / "dossiers" / "blockchain" / "chain"
 
 
 class MockBuilder:
@@ -30,7 +29,8 @@ class MockBuilder:
 
 
 def main() -> int:
-    up = load_registers(CHAIN / "_handoff")   # authoritative JSON path (no markdown re-parse)
+    with chain_dossier() as chain:
+        up = load_registers(chain / "cr_ir")   # authoritative JSON path (no markdown re-parse)
     model = project_build_sheets(up, domain="blockchain", subdomain="chain")
     sheet = {s.code: s for s in model.sheets}["CC_COMMIT_BLOCK_CANONICAL_V0"]
 

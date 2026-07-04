@@ -2,7 +2,7 @@
 
 A stage emits its governed information once; the engine then renders it into several *projections*
 (markdown doc, JSON handoff, later: compiler input, tokenized snapshot). The Phase-4 discovery was
-that these had silently diverged — the chain `_handoff/*.json` carried only ~25–40 % of the rows its
+that these had silently diverged — the chain `cr_ir/*.json` carried only ~25–40 % of the rows its
 own rendered markdown carried. The JSON was therefore not an *incomplete* handoff; it was a
 **non-authoritative projection**. A projection that does not carry exactly the governed information
 intended for downstream is INVALID, not merely lossy.

@@ -1,6 +1,6 @@
 """ONE-TIME MIGRATION — regenerate authoritative JSON handoffs from a locked markdown baseline.
 
-THIS IS NOT A PIPELINE STAGE. It exists only to repair legacy dossiers whose `_handoff/*.json` was
+THIS IS NOT A PIPELINE STAGE. It exists only to repair legacy dossiers whose `cr_ir/*.json` was
 emitted before Projection Fidelity was a governed property — the chain baseline's JSON carried only
 ~25–40 % of the rows its own rendered markdown carried (the Phase-4 discovery). No pipeline component
 imports this module; per the Projection Completeness Principle no *stage* may ever parse markdown.
@@ -9,7 +9,7 @@ a complete JSON handoff, asserts ASSERT_PROJECTION_FIDELITY, and freezes the res
 authoritative handoff. After every baseline dossier has been re-emitted natively under the completed
 gov_projection contract, this module is deletable.
 
-    python -m pgs_change_mgmt.engine._migrate_handoff_from_baseline \
+    python -m pgs_change_mgmt.engine._migrate_cr_ir_from_baseline \
         --dossier change_mgmt/dossiers/blockchain/chain --stages 5 6b 7
 """
 
@@ -64,7 +64,7 @@ def migrate_stage(dossier: Path, stage: str) -> tuple[Path, list[str]]:
     handoff = {field: registers[field] for field in emit if field in registers}
 
     issues = assert_projection_fidelity(stage, md_text, handoff)
-    out = dossier / "_handoff" / f"{stage}.json"
+    out = dossier / "cr_ir" / f"{stage}.json"
     # NEVER freeze an empty handoff: a stage that declares emit-fields but parses to zero registers is
     # a legacy pre-register doc (no <!-- register --> markers), not a migration — writing {} would be a
     # vacuously-"faithful" but useless authoritative handoff. Leave it absent and let the caller report.
@@ -103,7 +103,7 @@ def main() -> int:
                 print(f"   {i}")
             continue
         if not args.dry_run:
-            out = dossier / "_handoff" / f"{stage}.json"
+            out = dossier / "cr_ir" / f"{stage}.json"
             out.parent.mkdir(parents=True, exist_ok=True)
             out.write_text(json.dumps(handoff, indent=2) + "\n")
         print(f"S{stage}: {'WOULD FREEZE' if args.dry_run else 'FROZEN'} {len(handoff)} register(s) — {counts}")

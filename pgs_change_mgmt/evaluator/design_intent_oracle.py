@@ -18,6 +18,7 @@ governed coverage drops — a typo'd binding FQDN can no longer score 5/5.
 
 from __future__ import annotations
 
+import json
 import re
 from typing import Any, Mapping
 
@@ -78,6 +79,24 @@ def _semantic_tokens(code: str) -> list[str]:
     if parts and parts[0] in _FAMILY:
         parts = parts[1:]
     return parts
+
+
+def _cs_operations(grounding, cap_fqdn: str) -> set[str]:
+    """The governed operation vocabulary of a CS capability, read from its contract via the grounding
+    seam (`core.policy.operations`). A CC step may only invoke an operation the CS contract declares —
+    so this is the authority the op-vocabulary gate checks against. Empty on any failure (a NEW/unknown
+    CS has no source surface) so the gate never false-flags."""
+    ref = str(cap_fqdn).strip()
+    if "::" not in ref:
+        return set()
+    try:
+        env = grounding.query("artifact_source", ref=ref)
+    except Exception:
+        return set()
+    res = env.get("result") if isinstance(env, Mapping) else None
+    txt = res if isinstance(res, str) else json.dumps(res)
+    m = re.search(r"operations:\s*\[([^\]]*)\]", txt)   # the inline policy.operations list
+    return {s.strip() for s in m.group(1).split(",") if s.strip()} if m else set()
 
 
 def _exists(grounding, code_part: str) -> bool:
@@ -208,6 +227,18 @@ def check_cc_composition(data: dict[str, list[dict[str, Any]]], grounding) -> li
             if kind in {"CT", "CS"} and kind != fam:
                 issues.append(("cc_composition",
                     f"step kind '{kind}' != capability family '{fam}' for '{cap}'"))
+
+            # op-vocabulary gate — a CS step may only invoke an operation the CS contract declares
+            # (`core.policy.operations`). Catches SET/GET-style invented ops at Gate-1, long before the
+            # Protocol Compiler would reject them at admission (INVARIANT_CC_STORAGE_OP_CONFORMANCE).
+            if fam == "CS":
+                op = str(r.get("operation", "")).strip()
+                vocab = _cs_operations(grounding, r.get("capability", ""))
+                if op and vocab and op not in vocab:
+                    issues.append(("cc_composition",
+                        f"operation '{op}' on '{cap}' is not in its governed vocabulary "
+                        f"{sorted(vocab)} — a CC step may only invoke an operation the CS contract "
+                        f"declares (core.policy.operations)"))
     return issues
 
 
@@ -246,4 +277,34 @@ def check_authoring_mandate(data: dict[str, list], upstream: dict[str, list]) ->
         if new_total != declared_new:
             issues.append(("mandate_artifact_summary",
                 f"NEW count ({new_total}) != Stage 6b new_artifacts ({declared_new}) — reconcile with §3"))
+
+    # New-capability / new-intent business-intent declarations — the Construction Compiler realizes these
+    # into candidate CT/IN contracts. Enforce: (a) every declared code is a Stage-6b new artifact (no new
+    # code introduced here); (b) every NEW CT/IN has its declaration (else the compiler cannot realize the
+    # contract); (c) each intent binds to a declared workflow.
+    na_rows = [r for r in (upstream.get("new_artifacts") or []) if isinstance(r, dict)]
+    new_declared = {cp for r in na_rows if (cp := _code_part(r.get("code", "")))}
+    family = {cp: (str(r.get("family", "")).upper() or cp.split("_", 1)[0])
+              for r in na_rows if (cp := _code_part(r.get("code", "")))}
+    ncap = {cp for r in (data.get("new_capabilities") or []) if isinstance(r, dict) and (cp := _code_part(r.get("code", "")))}
+    nint = {cp for r in (data.get("new_intents") or []) if isinstance(r, dict) and (cp := _code_part(r.get("code", "")))}
+    for cp in sorted(ncap - new_declared):
+        issues.append(("new_capabilities", f"'{cp}' is declared as a new capability but is not a Stage 6b "
+                       f"new_artifacts code — S7 declares intent for codes 6b assigned, it does not mint new ones"))
+    for cp in sorted(nint - new_declared):
+        issues.append(("new_intents", f"'{cp}' is declared as a new intent but is not a Stage 6b new_artifacts code"))
+    for cp, fam in sorted(family.items()):
+        if fam == "CT" and cp not in ncap:
+            issues.append(("new_capabilities", f"new CT '{cp}' has no new_capabilities declaration — the "
+                           f"Construction Compiler cannot realize its contract (declare code · purpose · typed inputs/outputs)"))
+        if fam == "IN" and cp not in nint:
+            issues.append(("new_intents", f"new IN '{cp}' has no new_intents declaration (payload + workflow undeclared)"))
+    existing = _codes_in(upstream.get("existing_inventory"), "fqdn")
+    for r in (data.get("new_intents") or []):
+        if not isinstance(r, dict):
+            continue
+        wf, code = _code_part(r.get("workflow", "")), _code_part(r.get("code", ""))
+        if wf and wf not in (new_declared | existing):
+            issues.append(("new_intents", f"intent '{code}' binds to workflow '{wf}' which is not a declared "
+                           f"artifact (new_artifacts / existing_inventory)"))
     return issues

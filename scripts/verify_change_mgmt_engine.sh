@@ -31,10 +31,10 @@ from pgs_change_mgmt.contracts import GroundingProvider, Evaluator, Renderer, Wo
 from pgs_change_mgmt.grounding import PiGroundingProvider
 from pgs_change_mgmt.evaluator import IdentityEvaluator
 from pgs_change_mgmt.renderer import CCRenderer, INRenderer, RBRenderer, WFRenderer
-from pgs_change_mgmt.worker import QwenWorker
+from pgs_change_mgmt.worker import OllamaWorker
 g = PiGroundingProvider()
 assert isinstance(g, GroundingProvider) and isinstance(IdentityEvaluator(), Evaluator)
-assert isinstance(QwenWorker(g), Worker)
+assert isinstance(OllamaWorker(g), Worker)
 assert all(isinstance(r, Renderer) for r in (CCRenderer(),INRenderer(),RBRenderer(),WFRenderer()))
 print('grounding, evaluator, renderer(×4), worker all conform ✓')
 "
@@ -63,5 +63,20 @@ python -m pgs_change_mgmt.engine._dossier_selftest | tail -1
 
 echo ""; echo "════════ 8. structured dossier stage (S4: register-intent → renderer → oracle) ════════"
 python -m pgs_change_mgmt.engine._dossier_structured_selftest | tail -1
+
+echo ""; echo "════════ 9. S8 build-sheet projection (S2/S5/S6b/S7 → assembled sheets, gap-classified) ════════"
+python -m pgs_change_mgmt.engine._build_sheet_selftest | tail -1
+
+echo ""; echo "════════ 10. construction harness (sheet → constructor → invention + convergence; S9 evidence) ════════"
+python -m pgs_change_mgmt.engine._construction_selftest | tail -1
+
+echo ""; echo "════════ 11. Construction Model engine (Project→Construct→Validate→Serialize; graph + lowering pipeline + constraints) ════════"
+python -m pgs_change_mgmt.engine._construction_model_selftest | tail -1
+
+echo ""; echo "════════ 12. Construction Compiler CLI (thin orchestration → compiler report + status) ════════"
+python -m pgs_change_mgmt.engine._construction_cli_selftest | tail -1
+
+echo ""; echo "════════ 13. Design Review Contract (engine-certified Part A every stage; bounded Part B) ════════"
+python -m pgs_change_mgmt.engine._design_review_selftest | tail -1
 
 echo ""; echo "✅ ALL OFFLINE SELF-TESTS GREEN"

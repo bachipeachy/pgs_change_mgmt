@@ -93,7 +93,27 @@ critical path.*
 
 ---
 
-## 5. Cross-Subdomain Notes
+## 5. New Capabilities
+
+*New CT/capability declarations — **business intent only**. `Code` is a binding FQDN from a Stage 6b `new_artifacts` row; `Purpose` is business language; `Inputs`/`Outputs` are typed fields written `name:type` (comma-separated, e.g. `block:object`). The Construction Compiler realizes these into candidate CT contracts — it derives ALL protocol realization (purity, governing constitution, machine/implementation binding). You declare only intent. Nothing new → leave empty.*
+
+<!-- register:new_capabilities optional -->
+| Code | Purpose | Inputs | Outputs |
+|------|---------|--------|---------|
+
+---
+
+## 6. New Intents
+
+*New IN (ingress) declarations — **business intent only**. `Code` is a binding FQDN from `new_artifacts`; `Purpose` is business language; `Workflow` is the WF this intent admits into (a design decision — the FQDN); `Inputs` is the typed payload written `name:type` (comma-separated — only what ARRIVES at the intent boundary). The Construction Compiler realizes these into candidate IN contracts. Nothing new → leave empty.*
+
+<!-- register:new_intents optional -->
+| Code | Purpose | Workflow | Inputs |
+|------|---------|----------|--------|
+
+---
+
+## 7. Cross-Subdomain Notes
 
 *Artifacts that make cross-subdomain calls (permitted) or would write cross-subdomain (forbidden — must be a peer-owned dependency-gap CC). Audit only.*
 

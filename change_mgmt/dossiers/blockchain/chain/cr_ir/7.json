@@ -1,0 +1,235 @@
+{
+  "build_order": [
+    {
+      "wave": "1",
+      "step": "1",
+      "code": "blockchain::CT_PURE_HASH_BLOCK_V0",
+      "action": "NEW",
+      "subdomain": "chain",
+      "depends_on": "capability_transforms::CT_PURE_KECCAK256_HASH_V0"
+    },
+    {
+      "wave": "1",
+      "step": "2",
+      "code": "blockchain::CT_PURE_EXTRACT_PREDECESSOR_HASH_V0",
+      "action": "NEW",
+      "subdomain": "chain",
+      "depends_on": "\u2014"
+    },
+    {
+      "wave": "1",
+      "step": "3",
+      "code": "blockchain::CT_PURE_DERIVE_BALANCES_V0",
+      "action": "NEW",
+      "subdomain": "chain",
+      "depends_on": "\u2014"
+    },
+    {
+      "wave": "1",
+      "step": "4",
+      "code": "capability_transforms::CT_PURE_COMPARE_EQUAL_V0",
+      "action": "NEW",
+      "subdomain": "capability_transforms",
+      "depends_on": "\u2014"
+    },
+    {
+      "wave": "1",
+      "step": "5",
+      "code": "blockchain::STRUCTURE_CHAIN_STORAGE_V0",
+      "action": "NEW",
+      "subdomain": "chain",
+      "depends_on": "capability_side_effects::CS_APPENDONLY_JSONL_V0, capability_side_effects::CS_MUTABLE_JSON_V0"
+    },
+    {
+      "wave": "1",
+      "step": "6",
+      "code": "blockchain::EV_GENESIS_CREATED_V0",
+      "action": "NEW",
+      "subdomain": "chain",
+      "depends_on": "\u2014"
+    },
+    {
+      "wave": "1",
+      "step": "7",
+      "code": "blockchain::IN_COMMIT_BLOCK_V0",
+      "action": "NEW",
+      "subdomain": "chain",
+      "depends_on": "\u2014"
+    },
+    {
+      "wave": "1",
+      "step": "8",
+      "code": "blockchain::IN_BOOTSTRAP_GENESIS_CHAIN_V0",
+      "action": "NEW",
+      "subdomain": "chain",
+      "depends_on": "\u2014"
+    },
+    {
+      "wave": "2",
+      "step": "9",
+      "code": "blockchain::CC_VALIDATE_PREDECESSOR_LINK_V0",
+      "action": "NEW",
+      "subdomain": "chain",
+      "depends_on": "blockchain::CT_PURE_EXTRACT_PREDECESSOR_HASH_V0, capability_transforms::CT_PURE_COMPARE_EQUAL_V0, blockchain::STRUCTURE_CHAIN_STORAGE_V0"
+    },
+    {
+      "wave": "2",
+      "step": "10",
+      "code": "blockchain::CC_COMMIT_BLOCK_CANONICAL_V0",
+      "action": "NEW",
+      "subdomain": "chain",
+      "depends_on": "blockchain::CT_PURE_HASH_BLOCK_V0, blockchain::STRUCTURE_CHAIN_STORAGE_V0"
+    },
+    {
+      "wave": "2",
+      "step": "11",
+      "code": "blockchain::CC_CREATE_GENESIS_BLOCK_V0",
+      "action": "NEW",
+      "subdomain": "chain",
+      "depends_on": "blockchain::CT_PURE_HASH_BLOCK_V0, blockchain::STRUCTURE_CHAIN_STORAGE_V0"
+    },
+    {
+      "wave": "2",
+      "step": "12",
+      "code": "blockchain::CC_RECONCILE_BALANCES_V0",
+      "action": "NEW",
+      "subdomain": "chain",
+      "depends_on": "blockchain::CT_PURE_DERIVE_BALANCES_V0, blockchain::STRUCTURE_CHAIN_STORAGE_V0"
+    },
+    {
+      "wave": "3",
+      "step": "13",
+      "code": "blockchain::WF_COMMIT_BLOCK_V0",
+      "action": "NEW",
+      "subdomain": "chain",
+      "depends_on": "blockchain::IN_COMMIT_BLOCK_V0, blockchain::CC_VALIDATE_PREDECESSOR_LINK_V0, blockchain::CC_COMMIT_BLOCK_CANONICAL_V0, blockchain::CC_RECONCILE_BALANCES_V0"
+    },
+    {
+      "wave": "3",
+      "step": "14",
+      "code": "blockchain::WF_BOOTSTRAP_GENESIS_CHAIN_V0",
+      "action": "NEW",
+      "subdomain": "chain",
+      "depends_on": "blockchain::IN_BOOTSTRAP_GENESIS_CHAIN_V0, blockchain::CC_CREATE_GENESIS_BLOCK_V0"
+    },
+    {
+      "wave": "4",
+      "step": "15",
+      "code": "blockchain::RB_COMMIT_BLOCK_V0",
+      "action": "NEW",
+      "subdomain": "chain",
+      "depends_on": "blockchain::WF_COMMIT_BLOCK_V0, blockchain::STRUCTURE_CHAIN_STORAGE_V0"
+    },
+    {
+      "wave": "4",
+      "step": "16",
+      "code": "blockchain::RB_BOOTSTRAP_GENESIS_CHAIN_V0",
+      "action": "NEW",
+      "subdomain": "chain",
+      "depends_on": "blockchain::WF_BOOTSTRAP_GENESIS_CHAIN_V0, blockchain::STRUCTURE_CHAIN_STORAGE_V0"
+    }
+  ],
+  "critical_path": [
+    {
+      "position": "1",
+      "code": "blockchain::CT_PURE_HASH_BLOCK_V0"
+    },
+    {
+      "position": "2",
+      "code": "blockchain::CC_COMMIT_BLOCK_CANONICAL_V0"
+    },
+    {
+      "position": "3",
+      "code": "blockchain::WF_COMMIT_BLOCK_V0"
+    },
+    {
+      "position": "4",
+      "code": "blockchain::RB_COMMIT_BLOCK_V0"
+    }
+  ],
+  "mandate_artifact_summary": [
+    {
+      "action": "NEW",
+      "count": "16",
+      "description": "15 new chain artifacts (2 IN, 2 WF, 4 CC, 3 CT, 1 EV, 1 STRUCTURE, 2 RB) + 1 shared capability transform"
+    }
+  ],
+  "field_declarations": [
+    {
+      "code": "blockchain::WF_COMMIT_BLOCK_V0",
+      "subdomain_field": "chain"
+    },
+    {
+      "code": "blockchain::WF_BOOTSTRAP_GENESIS_CHAIN_V0",
+      "subdomain_field": "chain"
+    },
+    {
+      "code": "blockchain::CC_VALIDATE_PREDECESSOR_LINK_V0",
+      "subdomain_field": "chain"
+    },
+    {
+      "code": "blockchain::CC_COMMIT_BLOCK_CANONICAL_V0",
+      "subdomain_field": "chain"
+    },
+    {
+      "code": "blockchain::CC_CREATE_GENESIS_BLOCK_V0",
+      "subdomain_field": "chain"
+    },
+    {
+      "code": "blockchain::CC_RECONCILE_BALANCES_V0",
+      "subdomain_field": "chain"
+    },
+    {
+      "code": "blockchain::EV_GENESIS_CREATED_V0",
+      "subdomain_field": "chain"
+    },
+    {
+      "code": "blockchain::RB_COMMIT_BLOCK_V0",
+      "subdomain_field": "chain"
+    },
+    {
+      "code": "blockchain::RB_BOOTSTRAP_GENESIS_CHAIN_V0",
+      "subdomain_field": "chain"
+    }
+  ],
+  "new_capabilities": [
+    {
+      "code": "blockchain::CT_PURE_HASH_BLOCK_V0",
+      "purpose": "Compute a block's content signature by canonically hashing the block.",
+      "inputs": "block:object",
+      "outputs": "content_hash:string"
+    },
+    {
+      "code": "blockchain::CT_PURE_EXTRACT_PREDECESSOR_HASH_V0",
+      "purpose": "Extract the predecessor hash carried by a proposed block.",
+      "inputs": "block:object",
+      "outputs": "predecessor_hash:string"
+    },
+    {
+      "code": "blockchain::CT_PURE_DERIVE_BALANCES_V0",
+      "purpose": "Derive wallet balances from the committed transaction history.",
+      "inputs": "committed_history:object",
+      "outputs": "reconciled_balances:object"
+    },
+    {
+      "code": "capability_transforms::CT_PURE_COMPARE_EQUAL_V0",
+      "purpose": "Compare two values for equality.",
+      "inputs": "left:string, right:string",
+      "outputs": "is_equal:boolean"
+    }
+  ],
+  "new_intents": [
+    {
+      "code": "blockchain::IN_COMMIT_BLOCK_V0",
+      "purpose": "Admit a request to commit a proposed block to the canonical chain.",
+      "workflow": "blockchain::WF_COMMIT_BLOCK_V0",
+      "inputs": "proposed_block:object"
+    },
+    {
+      "code": "blockchain::IN_BOOTSTRAP_GENESIS_CHAIN_V0",
+      "purpose": "Admit a request to bootstrap the genesis chain and initialise the supply.",
+      "workflow": "blockchain::WF_BOOTSTRAP_GENESIS_CHAIN_V0",
+      "inputs": "genesis_block_content:object"
+    }
+  ]
+}
