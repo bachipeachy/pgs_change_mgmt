@@ -49,6 +49,8 @@ def chain_dossier() -> Iterator[Path]:
     dossier.mkdir(parents=True)
     for md in sorted(FIXTURE.glob("*_v0.md")):
         shutil.copy(md, dossier / md.name)
+    if (FIXTURE / "acceptance").exists():                         # acceptance scenarios travel with the dossier
+        shutil.copytree(FIXTURE / "acceptance", dossier / "acceptance")
     for stage in STAGES:
         _, issues = migrate_stage(dossier, stage)
         assert not issues, f"frozen fixture failed projection fidelity at S{stage}: {issues}"

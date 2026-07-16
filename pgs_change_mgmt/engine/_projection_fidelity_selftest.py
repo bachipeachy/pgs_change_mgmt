@@ -5,7 +5,7 @@ Three things proven, no model invoked:
   1. The one-time migration projects the locked chain markdown into JSON handoffs that are FAITHFUL —
      `assert_projection_fidelity` returns no issues for any migrated stage.
   2. The authoritative JSON path is EQUIVALENT to the old markdown path — `project_build_sheets` over
-     `load_registers(cr_ir)` yields the same 13 sheets as over `parse_registers(markdown)`.
+     `load_registers(cr_ir)` yields the same 16 sheets as over `parse_registers(markdown)`.
   3. The gate CATCHES the very bug that motivated it — a handoff that drops a row (the worker
      under-emission discovered in Phase 4) is flagged, not silently accepted. Had this gate existed,
      the lossy baseline would never have been accepted.
@@ -14,6 +14,8 @@ Three things proven, no model invoked:
 from __future__ import annotations
 
 import copy
+import shutil
+import tempfile
 from pathlib import Path
 
 from ..evaluator.projection_fidelity import assert_projection_fidelity
@@ -27,44 +29,56 @@ STAGES = ("1", "2", "3", "4", "5", "6", "6b", "7")
 
 
 def main() -> int:
-    # (1) migration is faithful for every worker-authored stage S1→S7
-    for stage in STAGES:
-        _, issues = migrate_stage(CHAIN, stage)
-        assert not issues, f"migration must be fidelity-clean for S{stage}: {issues}"
-    print(f"  migration faithful: {', '.join('S'+s for s in STAGES)} → fidelity-clean handoffs ✓")
+    # Hermetic: copy the live golden markdown into a throwaway dossier and migrate THERE. migrate_stage
+    # writes `cr_ir/*.json`; running it on the live dossier reshuffled the committed golden. Naming the
+    # tmp dir blockchain/chain keeps migrate's {parent.name}/{name} + the *_blockchain_chain_v0 filenames
+    # aligned. The live `change_mgmt/dossiers/.../cr_ir` is never touched.
+    root = Path(tempfile.mkdtemp(prefix="cm_fidelity_"))
+    chain = root / "blockchain" / "chain"
+    chain.mkdir(parents=True)
+    for md_file in sorted(CHAIN.glob("*_v0.md")):
+        shutil.copy(md_file, chain / md_file.name)
+    try:
+        # (1) migration is faithful for every worker-authored stage S1→S7
+        for stage in STAGES:
+            _, issues = migrate_stage(chain, stage)
+            assert not issues, f"migration must be fidelity-clean for S{stage}: {issues}"
+        print(f"  migration faithful: {', '.join('S'+s for s in STAGES)} → fidelity-clean handoffs ✓")
 
-    # (2) JSON path ≡ markdown path (the swap is safe)
-    md: dict[str, list] = {}
-    for stem in ("5_business_intent", "6b_design_intent", "7_authoring_mandate"):
-        md.update(parse_registers((CHAIN / f"{stem}_blockchain_chain_v0.md").read_text()))
-    md_sheets = [(s.code, s.kind, s.readiness, len(s.gaps))
-                 for s in project_build_sheets(md, domain="blockchain", subdomain="chain").sheets]
-    js = load_registers(CHAIN / "cr_ir")
-    js_sheets = [(s.code, s.kind, s.readiness, len(s.gaps))
-                 for s in project_build_sheets(js, domain="blockchain", subdomain="chain").sheets]
-    assert md_sheets == js_sheets, f"JSON path must equal markdown path:\n md={md_sheets}\n js={js_sheets}"
-    assert len(js_sheets) == 13, f"expected 13 chain sheets, got {len(js_sheets)}"
-    print(f"  authoritative JSON path ≡ markdown path: {len(js_sheets)} sheets, identical ✓")
+        # (2) JSON path ≡ markdown path (the swap is safe)
+        md: dict[str, list] = {}
+        for stem in ("5_business_intent", "6b_design_intent", "7_authoring_mandate"):
+            md.update(parse_registers((chain / f"{stem}_blockchain_chain_v0.md").read_text()))
+        md_sheets = [(s.code, s.kind, s.readiness, len(s.gaps))
+                     for s in project_build_sheets(md, domain="blockchain", subdomain="chain").sheets]
+        js = load_registers(chain / "cr_ir")
+        js_sheets = [(s.code, s.kind, s.readiness, len(s.gaps))
+                     for s in project_build_sheets(js, domain="blockchain", subdomain="chain").sheets]
+        assert md_sheets == js_sheets, f"JSON path must equal markdown path:\n md={md_sheets}\n js={js_sheets}"
+        assert len(js_sheets) == 16, f"expected 16 chain sheets, got {len(js_sheets)}"
+        print(f"  authoritative JSON path ≡ markdown path: {len(js_sheets)} sheets, identical ✓")
 
-    # (3) the gate catches a dropped row (the under-emission bug) and a missing register
-    md_text = (CHAIN / "7_authoring_mandate_blockchain_chain_v0.md").read_text()
-    full = load_registers(CHAIN / "cr_ir", stages=("7",))
-    assert assert_projection_fidelity("7", md_text, full) == [], "frozen S7 must be faithful"
+        # (3) the gate catches a dropped row (the under-emission bug) and a missing register
+        md_text = (chain / "7_authoring_mandate_blockchain_chain_v0.md").read_text()
+        full = load_registers(chain / "cr_ir", stages=("7",))
+        assert assert_projection_fidelity("7", md_text, full) == [], "frozen S7 must be faithful"
 
-    lossy = copy.deepcopy(full)
-    lossy["build_order"] = lossy["build_order"][:4]          # the exact shape of the original bug: 4 of 13
-    dropped = assert_projection_fidelity("7", md_text, lossy)
-    assert any("row count" in i and "build_order" in i for i in dropped), f"must flag dropped rows: {dropped}"
+        lossy = copy.deepcopy(full)
+        lossy["build_order"] = lossy["build_order"][:4]          # the exact shape of the original bug: 4 of 16
+        dropped = assert_projection_fidelity("7", md_text, lossy)
+        assert any("row count" in i and "build_order" in i for i in dropped), f"must flag dropped rows: {dropped}"
 
-    missing = copy.deepcopy(full)
-    del missing["build_order"]                                # build_order is required (not rollout/optional)
-    gone = assert_projection_fidelity("7", md_text, missing)
-    assert any("present in markdown but absent from JSON" in i for i in gone), f"must flag missing register: {gone}"
-    print("  gate catches dropped rows (4/13) and missing required register ✓ — the Phase-4 bug is now gated")
+        missing = copy.deepcopy(full)
+        del missing["build_order"]                                # build_order is required (not rollout/optional)
+        gone = assert_projection_fidelity("7", md_text, missing)
+        assert any("present in markdown but absent from JSON" in i for i in gone), f"must flag missing register: {gone}"
+        print("  gate catches dropped rows (4/16) and missing required register ✓ — the Phase-4 bug is now gated")
 
-    print("\nPROJECTION FIDELITY PROOF OK ✓ — Projection(markdown) == Projection(JSON) is governed "
-          "across S1→S7: migration faithful for every stage, JSON path ≡ markdown path, under-emission caught.")
-    return 0
+        print("\nPROJECTION FIDELITY PROOF OK ✓ — Projection(markdown) == Projection(JSON) is governed "
+              "across S1→S7: migration faithful for every stage, JSON path ≡ markdown path, under-emission caught.")
+        return 0
+    finally:
+        shutil.rmtree(root, ignore_errors=True)
 
 
 if __name__ == "__main__":

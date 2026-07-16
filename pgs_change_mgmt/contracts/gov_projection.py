@@ -122,6 +122,19 @@ GOV_PROJECTION_SCHEMA: tuple[GovProjectionField, ...] = (
     # narrative markdown.
     GovProjectionField("cc_composition", "6b", ("8",), "S6b §6 Capability Composition — per-CC CT/CS composition + data flow (declarative; the half of Design Intent the Build Sheet consumes)", fqdn_pointer=True, rollout=True),
     GovProjectionField("structure_stores", "6b", ("8",), "S6b §7 Structure Stores — entity-store declarations the Build Sheet assembles into STRUCTURE construction obligations", rollout=True),
+    # events + execution_outputs COMPLETE the EV construction contract, kept as two NORMALIZED registers
+    # so each owns exactly one concern (the S6b-normalization direction). An event has two viewpoints —
+    # deliberately not conflated:
+    #   • S4 `events`  = BUSINESS semantics  — why the event exists, its business trigger + meaning;
+    #   • S6b `events` = PROTOCOL semantics  — event identity + payload schema (the constructible fact).
+    # `execution_outputs` is the EXECUTION relationship — which node emits which protocol outputs — and is
+    # GENERAL (output_kind ∈ EVENT | STORE | ASSERT | …), so emission scales beyond events WITHOUT widening
+    # `execution_topology` into a kitchen sink (topology stays about ordering/dependencies). The EV renderer
+    # is then a pure join — events ⋈ execution_outputs on ev_code == output_code — no inference. (Two
+    # `events` fields, S4 and S6b, coexist: every schema consumer is stage-scoped via fields_emitted_by,
+    # and S8 loads only stages 5/6b/7, so the S4 register never reaches construction.)
+    GovProjectionField("events", "6b", ("8",), "S6b §9 Events — protocol-design event definition: payload schema (ev_code · field · type · required · format · description) the EV renderer constructs into an EV artifact", rollout=True),
+    GovProjectionField("execution_outputs", "6b", ("8",), "S6b §10 Execution Outputs — declared outputs of each execution node (producer · output_kind · output_code); the emitter relationship the EV renderer joins", fqdn_pointer=True, rollout=True),
     # ---- S7 Authoring Mandate ----
     GovProjectionField("build_order", "7", ("8",), "S7 §1 Build Dependency Order"),
     GovProjectionField("critical_path", "7", ("8",), "S7 §2 Critical Path"),

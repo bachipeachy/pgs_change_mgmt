@@ -155,11 +155,15 @@ binding codes belong. Existing artifacts are cited by their real FQDN in `fqdn` 
 them. Declarative, not procedural — governed capabilities + data flow, never code or JSONPath. One
 row per (CC, step), in execution order. `capability` is a CT/CS binding FQDN (verbatim from
 `new_artifacts` or `existing_inventory`); `consumes`/`produces` name logical data fields. The
-outcomes the composition can yield must cover the CC's routing surface in `execution_topology` (§5).*
+outcomes the composition can yield must cover the CC's routing surface in `execution_topology` (§5).
+`Interface` (CT steps) is the **explicit invocation binding** — how this step's CC-local fields bind
+to the invoked capability's declared FORMAL parameters, so a reusable CT keeps its own vocabulary and
+the CC keeps its business vocabulary. Syntax: `in: <ct_formal>=<cc_local>, …; out: <ct_output>=<cc_local>, …`
+(e.g. `in: left=predecessor_hash, right=current_head; out: is_equal=is_match`). CS steps leave it blank.*
 
 <!-- register:cc_composition optional -->
-| CC Code | Step | Capability | Kind (CT, CS) | Operation | Consumes | Produces |
-|---------|------|------------|---------------|-----------|----------|----------|
+| CC Code | Step | Capability | Kind (CT, CS) | Operation | Consumes | Produces | Interface |
+|---------|------|------------|---------------|-----------|----------|----------|-----------|
 
 ---
 

@@ -1,60 +1,4 @@
 {
-  "existing_inventory": [
-    {
-      "fqdn": "blockchain::ENTITY_BLOCK_V0",
-      "action": "REUSE",
-      "reason": "The committed block record schema.",
-      "source_finding": "S3 authoring_decisions REUSE"
-    },
-    {
-      "fqdn": "blockchain::EV_BLOCK_COMMITTED_V0",
-      "action": "REUSE",
-      "reason": "Emitted by the commit capability.",
-      "source_finding": "S3 authoring_decisions REUSE"
-    },
-    {
-      "fqdn": "blockchain::EV_BALANCE_RECONCILED_V0",
-      "action": "REUSE",
-      "reason": "Emitted by the reconciliation capability.",
-      "source_finding": "S3 authoring_decisions REUSE"
-    },
-    {
-      "fqdn": "blockchain::WF_PROPOSE_BLOCK_V0",
-      "action": "REUSE",
-      "reason": "Upstream producer of the proposed block the chain commits.",
-      "source_finding": "S3 dependency_discoveries EXISTING"
-    },
-    {
-      "fqdn": "capability_transforms::CT_PURE_KECCAK256_HASH_V0",
-      "action": "REUSE",
-      "reason": "The generic hash primitive reused inside the block-content hash transform.",
-      "source_finding": "S3 analysis_findings Q2"
-    },
-    {
-      "fqdn": "capability_side_effects::CS_MUTABLE_JSON_V0",
-      "action": "REUSE",
-      "reason": "The mutable substrate for the head-pointer store (READ/WRITE).",
-      "source_finding": "S4 gap_register GAP-2"
-    },
-    {
-      "fqdn": "capability_side_effects::CS_APPENDONLY_JSONL_V0",
-      "action": "REUSE",
-      "reason": "The append-only substrate for the committed block log (APPEND/GET_ALL).",
-      "source_finding": "S4 gap_register GAP-2"
-    },
-    {
-      "fqdn": "blockchain::CC_VALIDATE_MINT_POLICY_V0",
-      "action": "REVIEW",
-      "reason": "The genesis mint conforms to the existing mint policy; genesis constructs the mint directly in the block rather than via the mempool mint workflow.",
-      "source_finding": "design_resolution genesis mint"
-    },
-    {
-      "fqdn": "blockchain::WF_MINT_V0",
-      "action": "REVIEW",
-      "reason": "Mempool-based mint workflow; not reused for pre-consensus genesis (see design_resolution).",
-      "source_finding": "design_resolution genesis mint"
-    }
-  ],
   "new_artifacts": [
     {
       "capability": "Admit a request to commit a proposed block",
@@ -185,6 +129,62 @@
       "source_finding": "S6 governance_outcome"
     }
   ],
+  "existing_inventory": [
+    {
+      "fqdn": "blockchain::ENTITY_BLOCK_V0",
+      "action": "REUSE",
+      "reason": "The committed block record schema.",
+      "source_finding": "S3 authoring_decisions REUSE"
+    },
+    {
+      "fqdn": "blockchain::EV_BLOCK_COMMITTED_V0",
+      "action": "REUSE",
+      "reason": "Emitted by the commit capability.",
+      "source_finding": "S3 authoring_decisions REUSE"
+    },
+    {
+      "fqdn": "blockchain::EV_BALANCE_RECONCILED_V0",
+      "action": "REUSE",
+      "reason": "Emitted by the reconciliation capability.",
+      "source_finding": "S3 authoring_decisions REUSE"
+    },
+    {
+      "fqdn": "blockchain::WF_PROPOSE_BLOCK_V0",
+      "action": "REUSE",
+      "reason": "Upstream producer of the proposed block the chain commits.",
+      "source_finding": "S3 dependency_discoveries EXISTING"
+    },
+    {
+      "fqdn": "capability_transforms::CT_PURE_KECCAK256_HASH_V0",
+      "action": "REUSE",
+      "reason": "The generic hash primitive reused inside the block-content hash transform.",
+      "source_finding": "S3 analysis_findings Q2"
+    },
+    {
+      "fqdn": "capability_side_effects::CS_MUTABLE_JSON_V0",
+      "action": "REUSE",
+      "reason": "The mutable substrate for the head-pointer store (READ/WRITE).",
+      "source_finding": "S4 gap_register GAP-2"
+    },
+    {
+      "fqdn": "capability_side_effects::CS_APPENDONLY_JSONL_V0",
+      "action": "REUSE",
+      "reason": "The append-only substrate for the committed block log (APPEND/GET_ALL).",
+      "source_finding": "S4 gap_register GAP-2"
+    },
+    {
+      "fqdn": "blockchain::CC_VALIDATE_MINT_POLICY_V0",
+      "action": "REVIEW",
+      "reason": "The genesis mint conforms to the existing mint policy; genesis constructs the mint directly in the block rather than via the mempool mint workflow.",
+      "source_finding": "design_resolution genesis mint"
+    },
+    {
+      "fqdn": "blockchain::WF_MINT_V0",
+      "action": "REVIEW",
+      "reason": "Mempool-based mint workflow; not reused for pre-consensus genesis (see design_resolution).",
+      "source_finding": "design_resolution genesis mint"
+    }
+  ],
   "rb_declarations": [
     {
       "rb_code": "blockchain::RB_COMMIT_BLOCK_V0",
@@ -266,6 +266,20 @@
       "source_finding": "S5 actions Bootstrap"
     }
   ],
+  "artifact_summary": [
+    {
+      "action": "NEW",
+      "subdomain": "chain",
+      "count": "15",
+      "artifacts": "blockchain::IN_COMMIT_BLOCK_V0, blockchain::WF_COMMIT_BLOCK_V0, blockchain::CC_VALIDATE_PREDECESSOR_LINK_V0, blockchain::CC_COMMIT_BLOCK_CANONICAL_V0, blockchain::CC_RECONCILE_BALANCES_V0, blockchain::IN_BOOTSTRAP_GENESIS_CHAIN_V0, blockchain::WF_BOOTSTRAP_GENESIS_CHAIN_V0, blockchain::CC_CREATE_GENESIS_BLOCK_V0, blockchain::CT_PURE_HASH_BLOCK_V0, blockchain::CT_PURE_EXTRACT_PREDECESSOR_HASH_V0, blockchain::CT_PURE_DERIVE_BALANCES_V0, blockchain::EV_GENESIS_CREATED_V0, blockchain::STRUCTURE_CHAIN_STORAGE_V0, blockchain::RB_COMMIT_BLOCK_V0, blockchain::RB_BOOTSTRAP_GENESIS_CHAIN_V0"
+    },
+    {
+      "action": "NEW",
+      "subdomain": "capability_transforms",
+      "count": "1",
+      "artifacts": "capability_transforms::CT_PURE_COMPARE_EQUAL_V0"
+    }
+  ],
   "cc_composition": [
     {
       "cc_code": "blockchain::CC_VALIDATE_PREDECESSOR_LINK_V0",
@@ -274,7 +288,8 @@
       "kind": "CS",
       "operation": "READ",
       "consumes": "",
-      "produces": "current_head"
+      "produces": "current_head",
+      "interface": "in: key=\"head\"; out: value=current_head"
     },
     {
       "cc_code": "blockchain::CC_VALIDATE_PREDECESSOR_LINK_V0",
@@ -283,7 +298,8 @@
       "kind": "CT",
       "operation": "COMPUTE",
       "consumes": "proposed_block",
-      "produces": "predecessor_hash"
+      "produces": "predecessor_hash",
+      "interface": "in: block=proposed_block; out: predecessor_hash=predecessor_hash"
     },
     {
       "cc_code": "blockchain::CC_VALIDATE_PREDECESSOR_LINK_V0",
@@ -292,7 +308,8 @@
       "kind": "CT",
       "operation": "COMPUTE",
       "consumes": "predecessor_hash, current_head",
-      "produces": "is_match"
+      "produces": "is_match",
+      "interface": "in: left=predecessor_hash, right=current_head; out: is_equal=is_match"
     },
     {
       "cc_code": "blockchain::CC_COMMIT_BLOCK_CANONICAL_V0",
@@ -301,7 +318,8 @@
       "kind": "CT",
       "operation": "COMPUTE",
       "consumes": "proposed_block",
-      "produces": "content_hash"
+      "produces": "content_hash",
+      "interface": "in: block=proposed_block; out: content_hash=content_hash"
     },
     {
       "cc_code": "blockchain::CC_COMMIT_BLOCK_CANONICAL_V0",
@@ -310,7 +328,8 @@
       "kind": "CS",
       "operation": "APPEND",
       "consumes": "proposed_block, content_hash",
-      "produces": "committed_block"
+      "produces": "committed_block",
+      "interface": "in: record=proposed_block; out: record_id=committed_block"
     },
     {
       "cc_code": "blockchain::CC_COMMIT_BLOCK_CANONICAL_V0",
@@ -319,7 +338,8 @@
       "kind": "CS",
       "operation": "WRITE",
       "consumes": "content_hash",
-      "produces": "updated_head"
+      "produces": "",
+      "interface": "in: key=\"head\", value=content_hash"
     },
     {
       "cc_code": "blockchain::CC_CREATE_GENESIS_BLOCK_V0",
@@ -328,7 +348,8 @@
       "kind": "CT",
       "operation": "COMPUTE",
       "consumes": "genesis_block_content",
-      "produces": "content_hash"
+      "produces": "content_hash",
+      "interface": "in: block=genesis_block_content; out: content_hash=content_hash"
     },
     {
       "cc_code": "blockchain::CC_CREATE_GENESIS_BLOCK_V0",
@@ -337,7 +358,8 @@
       "kind": "CS",
       "operation": "APPEND",
       "consumes": "genesis_block_content, content_hash",
-      "produces": "genesis_block"
+      "produces": "genesis_block",
+      "interface": "in: record=genesis_block_content; out: record_id=genesis_block"
     },
     {
       "cc_code": "blockchain::CC_CREATE_GENESIS_BLOCK_V0",
@@ -346,7 +368,8 @@
       "kind": "CS",
       "operation": "WRITE",
       "consumes": "content_hash",
-      "produces": "head"
+      "produces": "",
+      "interface": "in: key=\"head\", value=content_hash"
     },
     {
       "cc_code": "blockchain::CC_RECONCILE_BALANCES_V0",
@@ -355,7 +378,8 @@
       "kind": "CS",
       "operation": "GET_ALL",
       "consumes": "",
-      "produces": "committed_history"
+      "produces": "committed_history",
+      "interface": "out: entries=committed_history"
     },
     {
       "cc_code": "blockchain::CC_RECONCILE_BALANCES_V0",
@@ -364,7 +388,8 @@
       "kind": "CT",
       "operation": "COMPUTE",
       "consumes": "committed_history",
-      "produces": "reconciled_balances"
+      "produces": "reconciled_balances",
+      "interface": "in: committed_history=committed_history; out: reconciled_balances=reconciled_balances"
     }
   ],
   "structure_stores": [
@@ -383,18 +408,37 @@
       "source_finding": "S5 identity_semantics; S1 business_invariants #5"
     }
   ],
-  "artifact_summary": [
+  "events": [
     {
-      "action": "NEW",
-      "subdomain": "chain",
-      "count": "15",
-      "artifacts": "blockchain::IN_COMMIT_BLOCK_V0, blockchain::WF_COMMIT_BLOCK_V0, blockchain::CC_VALIDATE_PREDECESSOR_LINK_V0, blockchain::CC_COMMIT_BLOCK_CANONICAL_V0, blockchain::CC_RECONCILE_BALANCES_V0, blockchain::IN_BOOTSTRAP_GENESIS_CHAIN_V0, blockchain::WF_BOOTSTRAP_GENESIS_CHAIN_V0, blockchain::CC_CREATE_GENESIS_BLOCK_V0, blockchain::CT_PURE_HASH_BLOCK_V0, blockchain::CT_PURE_EXTRACT_PREDECESSOR_HASH_V0, blockchain::CT_PURE_DERIVE_BALANCES_V0, blockchain::EV_GENESIS_CREATED_V0, blockchain::STRUCTURE_CHAIN_STORAGE_V0, blockchain::RB_COMMIT_BLOCK_V0, blockchain::RB_BOOTSTRAP_GENESIS_CHAIN_V0"
+      "ev_code": "blockchain::EV_GENESIS_CREATED_V0",
+      "field": "genesis_hash",
+      "type": "string",
+      "required": "true",
+      "format": "",
+      "description": "Genesis block content hash"
     },
     {
-      "action": "NEW",
-      "subdomain": "capability_transforms",
-      "count": "1",
-      "artifacts": "capability_transforms::CT_PURE_COMPARE_EQUAL_V0"
+      "ev_code": "blockchain::EV_GENESIS_CREATED_V0",
+      "field": "height",
+      "type": "integer",
+      "required": "true",
+      "format": "",
+      "description": "Block height (0 for genesis)"
+    },
+    {
+      "ev_code": "blockchain::EV_GENESIS_CREATED_V0",
+      "field": "timestamp",
+      "type": "string",
+      "required": "true",
+      "format": "date-time",
+      "description": "When genesis was created"
+    }
+  ],
+  "execution_outputs": [
+    {
+      "producer": "blockchain::CC_CREATE_GENESIS_BLOCK_V0",
+      "output_kind": "EVENT",
+      "output_code": "blockchain::EV_GENESIS_CREATED_V0"
     }
   ]
 }

@@ -20,7 +20,13 @@ KIND_META: dict[str, tuple[str, str]] = {
     "IN": ("intent", "CONSTITUTION_INTENT_V0"),
     "WF": ("workflow", "CONSTITUTION_WORKFLOW_V0"),
     "RB": ("runtime_binding", "CONSTITUTION_RUNTIME_BINDING_V0"),
+    "STRUCTURE": ("structure", "CONSTITUTION_STRUCTURE_V0"),
+    "EV": ("event", "CONSTITUTION_EVENT_V0"),
 }
+
+# Most families are topology-governed; STRUCTURE and EV are constitution-governed — the `governed_by`
+# namespace differs per kind. Mirrors the real compiled artifacts.
+_GOVERNED_PREFIX: dict[str, str] = {"STRUCTURE": "fb.constitution::", "EV": "fb.constitution::"}
 
 
 class ContractError(ValueError):
@@ -34,7 +40,7 @@ def constitution(kind: str) -> str:
 
 def governed_by(kind: str) -> str:
     """Fully-qualified `governed_by` for the machine block."""
-    return GOVERNED_BY_PREFIX + KIND_META[kind][1]
+    return _GOVERNED_PREFIX.get(kind, GOVERNED_BY_PREFIX) + KIND_META[kind][1]
 
 
 def machine_block(doc: dict[str, Any]) -> str:

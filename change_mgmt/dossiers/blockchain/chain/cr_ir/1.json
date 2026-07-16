@@ -388,7 +388,15 @@
       "source_finding": "CR seed \u00a713 Governance Scope"
     }
   ],
-  "clarification_requests": [],
+  "clarification_requests": [
+    {
+      "question": "NONE IDENTIFIED",
+      "why_needed": "",
+      "blocking": "",
+      "owner": "",
+      "source_finding": ""
+    }
+  ],
   "acceptance_criteria": [
     {
       "criterion": "The chain begins with a genesis block that records the assignment of the initial 1,000,000 BachiCoin supply to the Genesis Actor.",

@@ -79,4 +79,7 @@ python -m pgs_change_mgmt.engine._construction_cli_selftest | tail -1
 echo ""; echo "════════ 13. Design Review Contract (engine-certified Part A every stage; bounded Part B) ════════"
 python -m pgs_change_mgmt.engine._design_review_selftest | tail -1
 
+echo ""; echo "════════ 14. Compilation Unit source ingest (load_sources: FQDN recovery, doc-skip, dedup) ════════"
+python -m pgs_change_mgmt.engine._compilation_unit_selftest | tail -1
+
 echo ""; echo "✅ ALL OFFLINE SELF-TESTS GREEN"

@@ -462,12 +462,27 @@ def _b_rb(sheet: BuildSheetModel, up: dict[str, list]) -> None:
 
 
 def _b_ev(sheet: BuildSheetModel, up: dict[str, list]) -> None:
-    # emitter is not declared in any register (EVs are emitted facts) → an implementation gap
+    # the recorded business fact (the event's business capability)
     sheet.part_b["fact"] = FieldValue((f"S6b.new_artifacts#{sheet.code}.capability",), PRIMARY_ONLY, OK,
                                       "the recorded fact")
-    sheet.part_b["emitted_by"] = FieldValue((), UNRESOLVED, GAP, "GAP_IMPLEMENTATION")
-    sheet.gaps.append(Gap(f"{sheet.code}.emitted_by", "GAP_IMPLEMENTATION", "emitted_by",
-                          "projection", "no emitter declared upstream"))
+    # payload schema — S6b `events` (PROTOCOL viewpoint): the constructible wire payload, per-field rows.
+    payload = [r for r in _rows(up, "events") if code_part(r.get("ev_code", "")) == sheet.code]
+    if payload:
+        sheet.part_b["payload"] = FieldValue(("S6b.events",), PRIMARY_ONLY, OK, payload)
+    else:
+        sheet.part_b["payload"] = FieldValue((), UNRESOLVED, GAP, "GAP_DOSSIER")
+        sheet.gaps.append(Gap(f"{sheet.code}.payload", "GAP_DOSSIER", "payload", "projection", "S6b.events"))
+    # emitter — the EXECUTION relationship (S6b `execution_outputs`), joined on output_code == ev_code.
+    # No longer a GAP_IMPLEMENTATION: emission is now declared upstream, not deferred to code.
+    emitters = [r.get("producer") for r in _rows(up, "execution_outputs")
+                if str(r.get("output_kind", "")).upper() == "EVENT"
+                and code_part(r.get("output_code", "")) == sheet.code]
+    if emitters:
+        sheet.part_b["emitted_by"] = FieldValue(("S6b.execution_outputs",), PRIMARY_ONLY, OK, emitters)
+    else:
+        sheet.part_b["emitted_by"] = FieldValue((), UNRESOLVED, GAP, "GAP_DOSSIER")
+        sheet.gaps.append(Gap(f"{sheet.code}.emitted_by", "GAP_DOSSIER", "emitted_by",
+                              "projection", "S6b.execution_outputs"))
 
 
 def _b_structure(sheet: BuildSheetModel, up: dict[str, list]) -> None:

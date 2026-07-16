@@ -1,4 +1,76 @@
 {
+  "authoring_decisions": [
+    {
+      "capability": "Commit a proposed block to the canonical chain",
+      "decision": "AUTHOR_NEW",
+      "rationale": "Nothing commits a proposed block; only an unemitted block-committed event exists. This is the core gap the CR fills.",
+      "alternatives_checked": "searched COMMIT \u2014 only blockchain::EV_BLOCK_COMMITTED_V0 (an event), no committing capability",
+      "source_finding": "S2 gaps #1"
+    },
+    {
+      "capability": "Store the canonical chain ledger and track its head",
+      "decision": "AUTHOR_NEW",
+      "rationale": "No append-only ledger store exists to hold committed blocks and the chain head.",
+      "alternatives_checked": "only blockchain::STRUCTURE_BLOCKCHAIN_ORCHESTRATION_STORAGE_V0 exists \u2014 orchestration storage, not a chain store",
+      "source_finding": "S2 gaps #2"
+    },
+    {
+      "capability": "Validate a block's predecessor link before commit",
+      "decision": "AUTHOR_NEW",
+      "rationale": "Nothing enforces one predecessor per committed block against the chain head.",
+      "alternatives_checked": "searched PREDECESSOR \u2014 Matches (0)",
+      "source_finding": "S2 gaps #4"
+    },
+    {
+      "capability": "Compute a block's content signature",
+      "decision": "AUTHOR_NEW",
+      "rationale": "No block-canonical hash exists; a new pure transform canonicalises the block and hashes it, reusing the generic keccak primitive underneath.",
+      "alternatives_checked": "capability_transforms::CT_PURE_KECCAK256_HASH_V0 (generic bytes) and blockchain::CC_HASH_TRANSACTION_V0 (transaction-specific) \u2014 neither hashes a block",
+      "source_finding": "analysis_findings Q2"
+    },
+    {
+      "capability": "Bootstrap the genesis chain by creating the first block and initialising the supply",
+      "decision": "AUTHOR_NEW",
+      "rationale": "No genesis or bootstrap capability exists; a one-time workflow creates the genesis block and initialises the chain before consensus runs.",
+      "alternatives_checked": "searched GENESIS and BOOTSTRAP \u2014 Matches (0) for both",
+      "source_finding": "S2 gaps #3"
+    },
+    {
+      "capability": "Mint the initial genesis supply",
+      "decision": "REUSE",
+      "rationale": "Minting already exists under a mint policy and can serve the genesis supply without a new monetary mechanism.",
+      "alternatives_checked": "blockchain::WF_MINT_V0, blockchain::CC_VALIDATE_MINT_POLICY_V0 satisfy this as-is",
+      "source_finding": "S2 architectural_observations"
+    },
+    {
+      "capability": "Announce that a block was committed",
+      "decision": "REUSE",
+      "rationale": "The block-committed event already exists; the new commit capability emits it (payload settled in analysis Q1, bound at design).",
+      "alternatives_checked": "blockchain::EV_BLOCK_COMMITTED_V0 exists (unemitted)",
+      "source_finding": "S2 discovery_concerns"
+    },
+    {
+      "capability": "Record a committed block using the existing block schema",
+      "decision": "REUSE",
+      "rationale": "The block entity already defines the record the chain commits.",
+      "alternatives_checked": "blockchain::ENTITY_BLOCK_V0 fits exactly",
+      "source_finding": "S2 pps_baseline_fqdns"
+    },
+    {
+      "capability": "Reconcile wallet balances after commit",
+      "decision": "AUTHOR_NEW",
+      "rationale": "The human decided balances are derived and reconciled on-chain post-commit; no reconciliation capability exists to realise it.",
+      "alternatives_checked": "searched BALANCE \u2014 only blockchain::EV_BALANCE_RECONCILED_V0 (an event), no reconciliation capability",
+      "source_finding": "S1 known_facts #11; S2 business_processes Reconcile wallet balances after commit"
+    },
+    {
+      "capability": "Announce that balances were reconciled",
+      "decision": "REUSE",
+      "rationale": "The balance-reconciled event already exists; the reconciliation capability emits it.",
+      "alternatives_checked": "blockchain::EV_BALANCE_RECONCILED_V0 exists",
+      "source_finding": "S1 business_events Balance Reconciled"
+    }
+  ],
   "dependency_discoveries": [
     {
       "dependency": "Proposed block produced by the consensus loop",
@@ -71,78 +143,6 @@
       "type": "capability",
       "disposition": "AUTHOR_NEW",
       "evidence": "pi vocab search BALANCE \u2192 event only, no capability"
-    }
-  ],
-  "authoring_decisions": [
-    {
-      "capability": "Commit a proposed block to the canonical chain",
-      "decision": "AUTHOR_NEW",
-      "rationale": "Nothing commits a proposed block; only an unemitted block-committed event exists. This is the core gap the CR fills.",
-      "alternatives_checked": "searched COMMIT \u2014 only blockchain::EV_BLOCK_COMMITTED_V0 (an event), no committing capability",
-      "source_finding": "S2 gaps #1"
-    },
-    {
-      "capability": "Store the canonical chain ledger and track its head",
-      "decision": "AUTHOR_NEW",
-      "rationale": "No append-only ledger store exists to hold committed blocks and the chain head.",
-      "alternatives_checked": "only blockchain::STRUCTURE_BLOCKCHAIN_ORCHESTRATION_STORAGE_V0 exists \u2014 orchestration storage, not a chain store",
-      "source_finding": "S2 gaps #2"
-    },
-    {
-      "capability": "Validate a block's predecessor link before commit",
-      "decision": "AUTHOR_NEW",
-      "rationale": "Nothing enforces one predecessor per committed block against the chain head.",
-      "alternatives_checked": "searched PREDECESSOR \u2014 Matches (0)",
-      "source_finding": "S2 gaps #4"
-    },
-    {
-      "capability": "Compute a block's content signature",
-      "decision": "AUTHOR_NEW",
-      "rationale": "No block-canonical hash exists; a new pure transform canonicalises the block and hashes it, reusing the generic keccak primitive underneath.",
-      "alternatives_checked": "capability_transforms::CT_PURE_KECCAK256_HASH_V0 (generic bytes) and blockchain::CC_HASH_TRANSACTION_V0 (transaction-specific) \u2014 neither hashes a block",
-      "source_finding": "analysis_findings Q2"
-    },
-    {
-      "capability": "Bootstrap the genesis chain by creating the first block and initialising the supply",
-      "decision": "AUTHOR_NEW",
-      "rationale": "No genesis or bootstrap capability exists; a one-time workflow creates the genesis block and initialises the chain before consensus runs.",
-      "alternatives_checked": "searched GENESIS and BOOTSTRAP \u2014 Matches (0) for both",
-      "source_finding": "S2 gaps #3"
-    },
-    {
-      "capability": "Mint the initial genesis supply",
-      "decision": "REUSE",
-      "rationale": "Minting already exists under a mint policy and can serve the genesis supply without a new monetary mechanism.",
-      "alternatives_checked": "blockchain::WF_MINT_V0, blockchain::CC_VALIDATE_MINT_POLICY_V0 satisfy this as-is",
-      "source_finding": "S2 architectural_observations"
-    },
-    {
-      "capability": "Announce that a block was committed",
-      "decision": "REUSE",
-      "rationale": "The block-committed event already exists; the new commit capability emits it (payload settled in analysis Q1, bound at design).",
-      "alternatives_checked": "blockchain::EV_BLOCK_COMMITTED_V0 exists (unemitted)",
-      "source_finding": "S2 discovery_concerns"
-    },
-    {
-      "capability": "Record a committed block using the existing block schema",
-      "decision": "REUSE",
-      "rationale": "The block entity already defines the record the chain commits.",
-      "alternatives_checked": "blockchain::ENTITY_BLOCK_V0 fits exactly",
-      "source_finding": "S2 pps_baseline_fqdns"
-    },
-    {
-      "capability": "Reconcile wallet balances after commit",
-      "decision": "AUTHOR_NEW",
-      "rationale": "The human decided balances are derived and reconciled on-chain post-commit; no reconciliation capability exists to realise it.",
-      "alternatives_checked": "searched BALANCE \u2014 only blockchain::EV_BALANCE_RECONCILED_V0 (an event), no reconciliation capability",
-      "source_finding": "S1 known_facts #11; S2 business_processes Reconcile wallet balances after commit"
-    },
-    {
-      "capability": "Announce that balances were reconciled",
-      "decision": "REUSE",
-      "rationale": "The balance-reconciled event already exists; the reconciliation capability emits it.",
-      "alternatives_checked": "blockchain::EV_BALANCE_RECONCILED_V0 exists",
-      "source_finding": "S1 business_events Balance Reconciled"
     }
   ],
   "placement_decision": [

@@ -85,6 +85,11 @@ sessions/
 change_mgmt/generated/
 constructed/
 
+# Execution-validation evidence — validation_report.json written by `validate` (lifecycle_cli);
+# test evidence with a lifecycle distinct from the snapshot, regenerated each run; not source.
+# Matches any subdomain's dossier. To commit a report as evidence: git add -f <dossier>/validation/...
+change_mgmt/dossiers/**/validation/
+
 # Engine run output (audit trails) — written by engine.run(); not source
 engine_runs/
 
@@ -95,4 +100,6 @@ engine_runs/
 # (run state, reviewable locally, regenerated from the seed each run); not source. Matches any
 # subdomain's dossier. To commit one as governance evidence: git add -f <dossier>/_packages/...
 _packages/
+
+test_snapshot/
 

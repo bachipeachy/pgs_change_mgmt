@@ -262,6 +262,15 @@ An edge = `{ id, role, from, to, attrs{} }`.
 `CONTROLFLOW` carries a `condition`; the target is the endpoint. `DATAFLOW` is the primary abstraction —
 future attributes (provenance, ownership, effects, security) attach here and propagate over the same edges.
 
+**Persistence is a binding, not a port (store-read invariant).** A `CS` Step's store is resolved by
+`STORE_JOIN` into an `ACCESSES` edge — from the step capability's `storage_type` + the `STRUCTURE` — never
+from a consumed dataflow field. `TYPED_PORT` therefore never models persistence: a store read/write
+declares **no** dataflow `consumes` for the store itself; it `produces` the read value (typed by its
+capability contract), and a write targets the bound store. Naming a store in `consumes` is a category
+error — the store has no producer, so `TYPE_PROPAGATION` (correctly) cannot type it and construction is
+rejected `TYPED_PORT / GAP_DOSSIER`, never guessed. (Proven on `blockchain/chain` S8, 2026-07-03: the
+`CS_MUTABLE_JSON` READ and `CS_APPENDONLY_JSONL` GET_ALL entry steps.)
+
 ## II.6 Stable identity
 
 Every node/port/interface/edge has a stable, content-derived ID (diagnostics/provenance/traces attach by ID).
@@ -360,6 +369,7 @@ Model itself · full Workflow/Intent payload-Interface construction.
 - One graph; **concepts, not files**; serialization last.
 - Every object has a **stable ID**.
 - **Types belong to Interfaces** (contracts); one type system.
+- **Persistence is a binding, not a port** — a `CS` store access is an `ACCESSES` edge (Store Join, from `storage_type`), never a typed dataflow port; `TYPED_PORT` never models storage.
 - Every attribute has **one owner** (Design | Contract | Construction) + provenance.
 - **Constraints are declared**; Validate evaluates them; gap census = unsatisfied constraints.
 - **Construction validates its own Model; the compiler validates the artifacts.**

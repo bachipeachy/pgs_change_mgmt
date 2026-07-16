@@ -16,11 +16,13 @@ that runs *only after* a PASS, and can consume the manifest rather than rediscov
 """
 from __future__ import annotations
 
+import json
 import os
 import shutil
 import subprocess
 import tempfile
 from dataclasses import dataclass, field
+from datetime import datetime, timezone
 from pathlib import Path
 
 from pgs_governance.implementation.artifact_kinds import REGISTRY   # kind → registry sub-dir (single source)
@@ -120,6 +122,36 @@ class Admission:
         return "\n".join(L)
 
 
+# --- Compilation Unit sources (origin-agnostic) -----------------------------------------------------
+
+def load_sources(dirs, *, default_namespace: str) -> dict[str, str]:
+    """Load `.md` artifact sources from one or more directories into a `{fqdn: markdown}` map.
+
+    A Compilation Unit is assembled from artifact *sources* with no regard for why an artifact is
+    present — a source may be a generated delta, a reused protocol library, a shared cross-domain
+    artifact, or temporary support. This loader is that origin-agnostic ingest for on-disk sources.
+
+    An artifact source file is **namespace-qualified** by the snapshot filename convention
+    `<namespace>__<CODE>.md` (`::` → `__`), so each file self-declares its FQDN and can be placed by
+    ownership resolution with no per-CR wiring. Any `.md` without `__` (README, notes) is treated as
+    documentation and ignored. `default_namespace` is accepted for signature stability but not needed
+    when files are qualified. Duplicate FQDNs across sources are refused.
+    """
+    artifacts: dict[str, str] = {}
+    for d in dirs:
+        d = Path(d)
+        if not d.is_dir():
+            raise FileNotFoundError(f"artifact source directory not found: {d}")
+        for f in sorted(d.glob("*.md")):
+            if "__" not in f.stem:
+                continue  # documentation, not a namespace-qualified artifact
+            fqdn = f.stem.replace("__", "::", 1)
+            if fqdn in artifacts:
+                raise ValueError(f"duplicate artifact {fqdn!r} across Compilation Unit sources")
+            artifacts[fqdn] = f.read_text()
+    return artifacts
+
+
 # --- Phase 2: Federation Assembly -------------------------------------------------------------------
 
 _IGNORE = shutil.ignore_patterns(".git", "__pycache__", "*.pyc", ".venv", ".idea")
@@ -198,3 +230,121 @@ def admit(artifacts: dict[str, str], *, domain: str, subdomain: str, structure: 
     """Ownership Resolution + Federation Assembly + compile. Non-mutating; canonical repos untouched."""
     return compile_unit(assemble(artifacts, domain=domain, subdomain=subdomain),
                         structure=structure, timeout=timeout)
+
+
+# --- Persisted target: the admitted Compilation Unit as a test-snapshot candidate -------------------
+
+# The compile-contributing repos of the platform build topology — the same set the real sync script
+# (pgs_compiler/scripts/sync_protocol_snapshot.sh) reads — plus the compiler itself, copied so the
+# sync's BASE_DIR resolves to the isolated base rather than the editable install. Platform topology,
+# not CR-specific: the persisted build is domain-agnostic.
+_BUILD_REPOS = ("pgs_governance", "pgs_capabilities", "pgs_blockchain", "pgs_ai_governance", "pgs_compiler")
+
+
+@dataclass
+class Persisted:
+    ok: bool
+    workspace: Path
+    delta_present: list[str]
+    delta_missing: list[str]
+    output: str
+
+
+def _isolated_pythonpath(base: Path) -> str:
+    """PYTHONPATH that makes every governed package in `base` importable, shadowing editable installs.
+
+    A repo whose root is itself a package (`<repo>/__init__.py`) imports from `base`; a container repo
+    (packages nested one level in, e.g. pgs_capabilities/pgs_transforms) needs `base/<repo>` on the path.
+    Derived from layout, so it is agnostic to how each repo nests its package(s)."""
+    parts = [str(base)]
+    for repo in _BUILD_REPOS:
+        if (base / repo).is_dir() and not (base / repo / "__init__.py").exists():
+            parts.append(str(base / repo))
+    return os.pathsep.join(parts)
+
+
+def persist_test_snapshot(artifacts: dict[str, str], *, domain: str, subdomain: str,
+                          out_workspace: Path, timeout: float = 900.0) -> Persisted:
+    """Persist the admitted Compilation Unit as a COMPLETE, compile-verified test-snapshot candidate.
+
+    Baseline platform topology + generated delta + supplementary artifacts, compiled by the REAL
+    compiler and assembled by the REAL sync into `out_workspace` — with zero mutation of the canonical
+    repos (everything happens under an isolated federation base). This is the *persisted* form of the
+    Snapshot Admission Gate: the same Compilation Unit written to disk instead of thrown away, so the
+    Implementation and Execution-Validation phases consume the exact admitted snapshot.
+
+    The gate here is compile-time admissibility (`compile --all-structures` succeeds + the delta lands
+    in the assembled snapshot). Runtime conformance (`pi validate --strict`, `pgs_runtime run`) is a
+    LATER phase — it executes CT/CS implementations, which admission does not require — so the snapshot
+    is marked ADMITTED_UNVALIDATED, never VALID, until those implementations exist and `pgs build` runs.
+    """
+    out_workspace = Path(out_workspace)
+    pgs_root = ownership.resolve(f"{domain}::_PROBE_V0").repo_root.parent   # sibling root, derived — not hardcoded
+    base = Path(tempfile.mkdtemp(prefix="persist_base_"))
+    try:
+        ignore = shutil.ignore_patterns(".git", "__pycache__", "*.pyc", ".venv", ".idea", "compiled")
+        for repo in _BUILD_REPOS:
+            shutil.copytree(pgs_root / repo, base / repo, ignore=ignore)
+
+        # overlay generated delta + supplementary artifacts into the base registries
+        for fqdn, md in artifacts.items():
+            owner = ownership.resolve(fqdn)
+            code = fqdn.split("::")[-1]
+            kind_dir = REGISTRY.directory(code.split("_", 1)[0])
+            sub = subdomain if owner.namespace == domain else None
+            dest = (base / owner.repo_root.name / owner.package / "registry"
+                    / (Path(sub) if sub else Path()) / kind_dir / f"{code}.md")
+            dest.parent.mkdir(parents=True, exist_ok=True)
+            dest.write_text(md)
+        for ov in governance_surface.surface_overlays([f for f in artifacts if governance_surface.is_ct(f)]):
+            surf = base / ov.package_dir.relative_to(pgs_root) / ov.rel
+            surf.write_text(governance_surface.compose(surf.read_text(), ov.entries))
+
+        env = dict(os.environ, PYTHONPATH=_isolated_pythonpath(base))
+        out = ""
+
+        # compile every structure so the assembled snapshot is complete (the delta rides inside it)
+        r = subprocess.run(["python", "-m", "pgs_compiler.cli", "compile", "--all-structures"],
+                           capture_output=True, text=True, env=env, timeout=timeout)
+        out += r.stdout + r.stderr
+        if r.returncode != 0:
+            return Persisted(False, out_workspace, [], sorted(artifacts), out)
+
+        # assemble the snapshot with the REAL sync (BASE_DIR resolves to the isolated base)
+        out_workspace.mkdir(parents=True, exist_ok=True)
+        sync = base / "pgs_compiler" / "scripts" / "sync_protocol_snapshot.sh"
+        senv = dict(env, PGS_WORKSPACE=str(out_workspace), PGS_INVOKED_BY_BUILD="1")
+        r = subprocess.run(["bash", str(sync)], capture_output=True, text=True, env=senv, timeout=timeout)
+        out += r.stdout + r.stderr
+        if r.returncode != 0:
+            return Persisted(False, out_workspace, [], sorted(artifacts), out)
+
+        # federated query metadata (consumed by pi / change-mgmt evidence)
+        from pgs_compiler.compiler.projections.artifact_index import build_artifact_index, write_artifact_index
+        from pgs_compiler.compiler.projections.store_index import build_store_index, write_store_index
+        write_artifact_index(out_workspace, build_artifact_index(out_workspace))
+        write_store_index(out_workspace, build_store_index(out_workspace))
+
+        # confirm the delta actually landed in the assembled snapshot
+        artifacts_dir = out_workspace / "protocol_snapshot" / "artifacts"
+        gov_dir = out_workspace / "protocol_snapshot" / "governance" / "artifacts"
+        present, missing = [], []
+        for fqdn in sorted(artifacts):
+            fname = fqdn.replace("::", "__") + ".json"
+            found = any(artifacts_dir.rglob(fname)) or any(gov_dir.rglob(fname))
+            (present if found else missing).append(fqdn)
+
+        # honest marker: admitted at compile time, NOT execution-validated (impls pending) — never VALID
+        status = {
+            "status": "ADMITTED_UNVALIDATED",
+            "reason": "compile-admitted test-snapshot candidate; conformance/execution not run "
+                      "(implementations pending). Not for production consumption.",
+            "compile_verified": True,
+            "delta_artifacts": len(present),
+            "timestamp": datetime.now(timezone.utc).isoformat(),
+        }
+        (out_workspace / "snapshot_status.json").write_text(json.dumps(status, indent=2) + "\n")
+
+        return Persisted(not missing, out_workspace, present, missing, out)
+    finally:
+        shutil.rmtree(base, ignore_errors=True)

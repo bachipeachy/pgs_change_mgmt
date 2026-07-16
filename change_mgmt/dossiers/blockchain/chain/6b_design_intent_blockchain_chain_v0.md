@@ -197,22 +197,22 @@ row per (CC, step), in execution order. `capability` is a CT/CS binding FQDN (ve
 outcomes the composition can yield must cover the CC's routing surface in `execution_topology` (§5).*
 
 <!-- register:cc_composition optional -->
-| CC Code | Step | Capability | Kind (CT, CS) | Operation | Consumes | Produces |
-|---------|------|------------|---------------|-----------|----------|----------|
-| blockchain::CC_VALIDATE_PREDECESSOR_LINK_V0 | 1 | capability_side_effects::CS_MUTABLE_JSON_V0 | CS | READ |  | current_head |
-| blockchain::CC_VALIDATE_PREDECESSOR_LINK_V0 | 2 | blockchain::CT_PURE_EXTRACT_PREDECESSOR_HASH_V0 | CT | COMPUTE | proposed_block | predecessor_hash |
-| blockchain::CC_VALIDATE_PREDECESSOR_LINK_V0 | 3 | capability_transforms::CT_PURE_COMPARE_EQUAL_V0 | CT | COMPUTE | predecessor_hash, current_head | is_match |
-| blockchain::CC_COMMIT_BLOCK_CANONICAL_V0 | 1 | blockchain::CT_PURE_HASH_BLOCK_V0 | CT | COMPUTE | proposed_block | content_hash |
-| blockchain::CC_COMMIT_BLOCK_CANONICAL_V0 | 2 | capability_side_effects::CS_APPENDONLY_JSONL_V0 | CS | APPEND | proposed_block, content_hash | committed_block |
-| blockchain::CC_COMMIT_BLOCK_CANONICAL_V0 | 3 | capability_side_effects::CS_MUTABLE_JSON_V0 | CS | WRITE | content_hash | updated_head |
-| blockchain::CC_CREATE_GENESIS_BLOCK_V0 | 1 | blockchain::CT_PURE_HASH_BLOCK_V0 | CT | COMPUTE | genesis_block_content | content_hash |
-| blockchain::CC_CREATE_GENESIS_BLOCK_V0 | 2 | capability_side_effects::CS_APPENDONLY_JSONL_V0 | CS | APPEND | genesis_block_content, content_hash | genesis_block |
-| blockchain::CC_CREATE_GENESIS_BLOCK_V0 | 3 | capability_side_effects::CS_MUTABLE_JSON_V0 | CS | WRITE | content_hash | head |
-| blockchain::CC_RECONCILE_BALANCES_V0 | 1 | capability_side_effects::CS_APPENDONLY_JSONL_V0 | CS | GET_ALL |  | committed_history |
-| blockchain::CC_RECONCILE_BALANCES_V0 | 2 | blockchain::CT_PURE_DERIVE_BALANCES_V0 | CT | COMPUTE | committed_history | reconciled_balances |
-
----
-
+| CC Code | Step | Capability | Kind (CT, CS) | Operation | Consumes | Produces | Interface |
+|---------|------|------------|---------------|-----------|----------|---------------------|
+| blockchain::CC_VALIDATE_PREDECESSOR_LINK_V0 | 1 | capability_side_effects::CS_MUTABLE_JSON_V0 | CS | READ |  | current_head | in: key="head"; out: value=current_head |
+| blockchain::CC_VALIDATE_PREDECESSOR_LINK_V0 | 2 | blockchain::CT_PURE_EXTRACT_PREDECESSOR_HASH_V0 | CT | COMPUTE | proposed_block | predecessor_hash | in: block=proposed_block; out: predecessor_hash=predecessor_hash |
+| blockchain::CC_VALIDATE_PREDECESSOR_LINK_V0 | 3 | capability_transforms::CT_PURE_COMPARE_EQUAL_V0 | CT | COMPUTE | predecessor_hash, current_head | is_match | in: left=predecessor_hash, right=current_head; out: is_equal=is_match |
+| blockchain::CC_COMMIT_BLOCK_CANONICAL_V0 | 1 | blockchain::CT_PURE_HASH_BLOCK_V0 | CT | COMPUTE | proposed_block | content_hash | in: block=proposed_block; out: content_hash=content_hash |
+| blockchain::CC_COMMIT_BLOCK_CANONICAL_V0 | 2 | capability_side_effects::CS_APPENDONLY_JSONL_V0 | CS | APPEND | proposed_block, content_hash | committed_block | in: record=proposed_block; out: record_id=committed_block |
+| blockchain::CC_COMMIT_BLOCK_CANONICAL_V0 | 3 | capability_side_effects::CS_MUTABLE_JSON_V0 | CS | WRITE | content_hash |  | in: key="head", value=content_hash |
+| blockchain::CC_CREATE_GENESIS_BLOCK_V0 | 1 | blockchain::CT_PURE_HASH_BLOCK_V0 | CT | COMPUTE | genesis_block_content | content_hash | in: block=genesis_block_content; out: content_hash=content_hash |
+| blockchain::CC_CREATE_GENESIS_BLOCK_V0 | 2 | capability_side_effects::CS_APPENDONLY_JSONL_V0 | CS | APPEND | genesis_block_content, content_hash | genesis_block | in: record=genesis_block_content; out: record_id=genesis_block |
+| blockchain::CC_CREATE_GENESIS_BLOCK_V0 | 3 | capability_side_effects::CS_MUTABLE_JSON_V0 | CS | WRITE | content_hash |  | in: key="head", value=content_hash |
+| blockchain::CC_RECONCILE_BALANCES_V0 | 1 | capability_side_effects::CS_APPENDONLY_JSONL_V0 | CS | GET_ALL |  | committed_history | out: entries=committed_history |
+| blockchain::CC_RECONCILE_BALANCES_V0 | 2 | blockchain::CT_PURE_DERIVE_BALANCES_V0 | CT | COMPUTE | committed_history | reconciled_balances | in: committed_history=committed_history; out: reconciled_balances=reconciled_balances |
+-----------|
+--------------|
+-----------|
 ## 7. STRUCTURE Stores
 
 *New entity stores. `storage_type` selects the CS substrate; `proposed_path` is the declared store path (governance concern — never hardcoded later); `used_by` names the writing CC (its owning subdomain only).*
@@ -234,6 +234,43 @@ outcomes the composition can yield must cover the CC's routing surface in `execu
 |-------------------------------|-----------|-------|-----------|
 | NEW | chain | 15 | blockchain::IN_COMMIT_BLOCK_V0, blockchain::WF_COMMIT_BLOCK_V0, blockchain::CC_VALIDATE_PREDECESSOR_LINK_V0, blockchain::CC_COMMIT_BLOCK_CANONICAL_V0, blockchain::CC_RECONCILE_BALANCES_V0, blockchain::IN_BOOTSTRAP_GENESIS_CHAIN_V0, blockchain::WF_BOOTSTRAP_GENESIS_CHAIN_V0, blockchain::CC_CREATE_GENESIS_BLOCK_V0, blockchain::CT_PURE_HASH_BLOCK_V0, blockchain::CT_PURE_EXTRACT_PREDECESSOR_HASH_V0, blockchain::CT_PURE_DERIVE_BALANCES_V0, blockchain::EV_GENESIS_CREATED_V0, blockchain::STRUCTURE_CHAIN_STORAGE_V0, blockchain::RB_COMMIT_BLOCK_V0, blockchain::RB_BOOTSTRAP_GENESIS_CHAIN_V0 |
 | NEW | capability_transforms | 1 | capability_transforms::CT_PURE_COMPARE_EQUAL_V0 |
+
+---
+
+## 9. Events
+
+*The protocol-design definition of each new event: its payload schema. This is the **protocol
+viewpoint** of an event, deliberately kept separate from the **business viewpoint** in S4 (`events`:
+why the event exists, its business trigger and meaning). Here the concern is the constructible fact —
+the wire payload the EV artifact must carry. One row per payload field. `format` refines a `type`
+(e.g. `date-time`, `uuid`); `description` is the field's semantic note (the EV renderer projects it —
+it does not invent prose). The emitter is NOT declared here — emission is an execution relationship,
+owned by §10 `execution_outputs`, not a property of the event.*
+
+<!-- register:events optional -->
+| EV Code | Field | Type | Required | Format | Description |
+|---------|-------|------|----------|--------|-------------|
+| blockchain::EV_GENESIS_CREATED_V0 | genesis_hash | string | true |  | Genesis block content hash |
+| blockchain::EV_GENESIS_CREATED_V0 | height | integer | true |  | Block height (0 for genesis) |
+| blockchain::EV_GENESIS_CREATED_V0 | timestamp | string | true | date-time | When genesis was created |
+
+---
+
+## 10. Execution Outputs
+
+*The declared outputs of each execution node — the **execution relationship**: which producer emits
+which protocol artifact. The relationship originates at the producer (a CC), exactly as a Capability
+consumes a Store; the sink (the event) carries no knowledge of who emits it. This register is
+GENERAL: `output_kind ∈ EVENT | STORE | ASSERT | …`, so it scales to future output kinds without
+widening `execution_topology` (§5), which stays about ordering and dependencies. `output_code` is a
+binding FQDN of the emitted artifact (`new_artifacts` or `existing_inventory`). The EV renderer joins
+this register to §9 `events` on `ev_code == output_code` to construct the EV artifact — pure
+projection, no inference.*
+
+<!-- register:execution_outputs optional -->
+| Producer | Output Kind (EVENT, STORE, ASSERT) | Output Code |
+|----------|-----------------------------------|-------------|
+| blockchain::CC_CREATE_GENESIS_BLOCK_V0 | EVENT | blockchain::EV_GENESIS_CREATED_V0 |
 
 ---
 
@@ -277,4 +314,4 @@ keys match the register ids above exactly.*
 | **Consumes** ← Stage 5 | scope_boundary · invariants · actions · provisional_codes |
 | **Consumes** ← Stage 6 | ownership · storage_governance · cross_subdomain_deps · pps_artifacts_requiring_action |
 | **Emits** → Stage 7 | new_artifacts · existing_inventory · rb_declarations · execution_topology · artifact_summary |
-| **Emits** → Stage 8 (Build Sheet) | cc_composition |
+| **Emits** → Stage 8 (Build Sheet) | cc_composition · structure_stores · events · execution_outputs |

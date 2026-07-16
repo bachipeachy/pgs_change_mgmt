@@ -34,6 +34,10 @@ from ..renderer import transform as ct_renderer   # the PAS backend (CT family)
 from ..renderer.intent import INRenderer          # the PAS backend (IN family)
 from ..renderer.workflow import WFRenderer         # the PAS backend (WF family)
 from ..renderer.runtime_binding import RBRenderer   # the PAS backend (RB family)
+from ..renderer.structure import StructureRenderer   # the PAS backend (STRUCTURE family)
+from ..renderer.event import EVRenderer               # the PAS backend (EV family)
+from . import ownership                                # governed owner (package · impl namespace)
+from . import expression                               # shared binding-expression grammar (one grammar)
 
 # --- Construction Projection schema utilities (self-contained: zero dependency on S1–S7 / build_sheet,
 #     so the Construction Compiler extracts later as a file move, not a redesign) ---------------------
@@ -61,6 +65,38 @@ def _typed_fields(spec: Any) -> dict[str, str]:
             if n.strip() and n.strip() not in ("—", "-"):
                 out[n.strip()] = t.strip()
     return out
+
+
+def _parse_interface(spec: Any) -> dict[str, dict[str, str]]:
+    """Parse a step's explicit **invocation** interface into {"inputs": {formal: source}, "outputs":
+    {formal: cc_local}} — capability-kind-agnostic (CT and CS are the two users; the compiler never
+    branches on kind). Accepts the markdown-authored string form
+    (`"in: left=predecessor_hash, key=\"head\"; out: value=current_head"`) — the compact CR-IR cell,
+    consistent with the `consumes`/`produces` string convention — or an already-structured dict.
+
+    Both halves are keyed by the CAPABILITY-side formal name. An input `source` is either a CC-local
+    field name (bound to its producer's JSONPath at lowering) or a double-quoted literal (`key=\"head\"`);
+    source strings are stored verbatim and the quoting is interpreted at lowering. Empty cell → {}."""
+    if isinstance(spec, dict):
+        return spec
+    s = str(spec or "").strip()
+    if not s or s in ("—", "-"):
+        return {}
+    iface: dict[str, dict[str, str]] = {}
+    for seg in s.split(";"):
+        seg = seg.strip()
+        if seg.lower().startswith("in:"):
+            side, body = "inputs", seg[3:]
+        elif seg.lower().startswith("out:"):
+            side, body = "outputs", seg[4:]
+        else:
+            continue
+        for pair in body.split(","):
+            if "=" in pair:
+                formal, local = pair.split("=", 1)
+                if formal.strip() and local.strip():
+                    iface.setdefault(side, {})[formal.strip()] = local.strip()
+    return iface
 
 
 def load_registers(handoff_dir: Path | str, stages: tuple[str, ...] = ("5", "6b", "7")) -> dict[str, list]:
@@ -204,8 +240,11 @@ def load_capability_interface(workspace: Path, fqdn: str, *, operation: str | No
     else:  # CS — operation-keyed name lists; types from the contract's shared `field_types` map
         ftypes = core.get("field_types") or {}
         op = (core.get("operations") or {}).get(operation or "", {})
+        # CS field optionality is not yet governed (operations declare bare name lists) — so a CS formal
+        # input is NOT assumed required. The invocation oracle stays generic: requiredness is data on the
+        # port (CT=required, CS=lax), never a kind-branch in the validator.
         for name in op.get("input", []):
-            iface.ports.append(Port(f"{iface.id}:in:{name}", name, "in", ftypes.get(name)))
+            iface.ports.append(Port(f"{iface.id}:in:{name}", name, "in", ftypes.get(name), required=False))
         for name in op.get("output", []):
             iface.ports.append(Port(f"{iface.id}:out:{name}", name, "out", ftypes.get(name)))
     return iface
@@ -244,7 +283,11 @@ def project(up: dict[str, list], *, domain: str, subdomain: str, workspace: Path
             step_id = f"{cc_fqdn}#step:{idx}"
             step = g.add(Node(step_id, "Step",
                               attrs={"index": idx, "kind": r.get("kind", ""), "operation": operation,
-                                     "capability": cap_fqdn}))
+                                     "capability": cap_fqdn,
+                                     # Explicit invocation interface (S6b-authored): the single contract
+                                     # binding this step to the invoked capability's formal parameters —
+                                     # {"inputs": {ct_formal: cc_local}, "outputs": {ct_output: cc_local}}.
+                                     "interface": _parse_interface(r.get("interface"))}))
             step.interface = Interface(id=f"iface:{step_id}", owner=step_id)
             for name in _fields(r.get("consumes", "")):
                 step.interface.ports.append(Port(f"{step_id}:in:{name}", name, "in", None))
@@ -276,22 +319,19 @@ def project(up: dict[str, list], *, domain: str, subdomain: str, workspace: Path
     return g
 
 
-# namespace → owning transforms package (protocol realization; mirrors the ownership convention)
-_TRANSFORM_PKG = {"blockchain": "pgs_blockchain", "capability_transforms": "pgs_transforms",
-                  "ai_governance": "pgs_ai_governance"}
-
-
 def _derive_ct_machine(fqdn: str, code: str) -> dict[str, Any]:
     """Derive the CT machine block — *protocol realization*, the compiler's job. The author declares
     business intent; the compiler derives kind, purity, operation, and a DEFAULT implementation binding.
     The binding is a Runtime-Binding concern that may override this default: a capability exists before
-    any Python does, so the default need not resolve to an existing module."""
-    ns = fqdn.split("::", 1)[0]
-    pkg = _TRANSFORM_PKG.get(ns, f"pgs_{ns}")
-    sub = "transforms.atoms" if ns == "capability_transforms" else "transforms"
+    any Python does, so the default need not resolve to an existing module.
+
+    The implementation module path is *materialized*, not interpreted: the physical layout (owning
+    package · intra-package implementation namespace) is governed metadata resolved through the
+    ownership service, so the compiler embeds zero knowledge of package organization."""
+    owner = ownership.resolve(fqdn)
     return {
         "ct_kind": "atom", "ct_purity": "ct_pure", "operation": "COMPUTE",
-        "implementation": {"module": f"{pkg}.implementation.{sub}.{code.lower()}", "callable": "execute"},
+        "implementation": {"module": owner.implementation_module(code), "callable": "execute"},
     }
 
 
@@ -374,6 +414,10 @@ def project_wf(g: ConstructionGraph, up: dict[str, list]) -> None:
                 nxt = _parse_routing(r.get("routing", ""))
                 if nt == "IN":
                     start = nname
+                    # An IN emits its DERIVED admission surface (ACK/NACK), never SUCCESS — realize the
+                    # authored admission-success target on the ACK edge and route NACK to an EXIT terminal.
+                    admit_target = nxt.get("ACK") or nxt.get("SUCCESS")
+                    nxt = {**({"ACK": admit_target} if admit_target else {}), "NACK": "EXIT"}
                 nodes.append({"node": nname, "type": nt, "code": f"{g.domain}::{nname}", "next": nxt})
                 referenced_exits |= {t for t in nxt.values() if t.startswith("EXIT")}
             elif nt.startswith("EXIT"):
@@ -408,6 +452,50 @@ def project_rb(g: ConstructionGraph, up: dict[str, list]) -> None:
             "code": code, "summary": summaries.get(code, code),
             "storage_structure": str(r.get("storage_structure", "")).strip(),
             "bindings": bindings,
+        }))
+
+
+def project_ev(g: ConstructionGraph, up: dict[str, list], *, domain: str) -> None:
+    """EV projector (observation-level) — realize each new `Event` from its authored declaration. Unlike
+    the projection families (CC/WF), an EV is a *semantic* concept: its constructible content — the payload
+    schema and the emitter — is NOT derivable, it is declared upstream. `new_artifacts` (family=EV) names
+    the event; S6b `events` carries its payload (the protocol viewpoint); S6b `execution_outputs` carries
+    the emitter relationship (which producer emits it, joined on output_code == ev_code). The EV renderer
+    is a pure join over the two — no inference. Absent payload/emitter is a gap the model reports (below),
+    never a fabricated artifact."""
+    for r in [r for r in _rows(up, "new_artifacts") if str(r.get("family", "")).upper() == "EV"]:
+        code = code_part(r.get("code", ""))
+        if not code:
+            continue
+        payload = [row for row in _rows(up, "events") if code_part(row.get("ev_code", "")) == code]
+        emitters = [row.get("producer") for row in _rows(up, "execution_outputs")
+                    if str(row.get("output_kind", "")).upper() == "EVENT"
+                    and code_part(row.get("output_code", "")) == code]
+        g.add(Node(f"{domain}::{code}", "Event", attrs={
+            "code": code, "summary": r.get("capability", code),
+            "payload": payload, "emitted_by": emitters,
+        }))
+
+
+def project_structure(g: ConstructionGraph, up: dict[str, list], *, domain: str, subdomain: str) -> None:
+    """STRUCTURE projector (topology-level) — realize the subdomain's storage STRUCTURE from its authored
+    declaration (`new_artifacts` family=STRUCTURE) over the already-projected `Store` nodes
+    (`structure_stores`). The author declares the store set (names · storage types · paths); the
+    Construction Compiler derives the protocol realization — the storage-root convention and the
+    resolution/isolation/migration doctrine — in the STRUCTURE renderer. This is a *template* renderer:
+    no upstream semantics beyond the store table are required, so STRUCTURE is construction-complete today."""
+    struct_rows = [r for r in _rows(up, "new_artifacts") if str(r.get("family", "")).upper() == "STRUCTURE"]
+    if not struct_rows:
+        return
+    stores = [{"name": s.attrs["store_name"], "storage_type": s.attrs.get("storage_type"),
+               "path": s.attrs.get("path")} for s in g.by_concept("Store")]
+    for r in struct_rows:
+        code = code_part(r.get("code", ""))
+        if not code:
+            continue
+        g.add(Node(f"{domain}::{code}", "StorageStructure", attrs={
+            "code": code, "summary": r.get("capability", code),
+            "domain": domain, "subdomain": subdomain, "stores": stores,
         }))
 
 
@@ -543,6 +631,23 @@ def surface_derivation_pass(g: ConstructionGraph) -> None:
         step.attrs["result_surface"] = list(dict.fromkeys(conds))
 
 
+def wf_binding_pass(g: ConstructionGraph) -> None:
+    """Binding — map each WF CC node's external inputs to the workflow payload. A CC receives the fields
+    its steps consume as `$.inputs.<field>`; the WF node supplies them by binding each to `$.payload.<field>`
+    (the ingress payload the IN admits). Derived from the referenced CC's external in-ports (exposed by
+    BINDING_PROPAGATION) — identity realization, zero invention."""
+    for wf in g.by_concept("Workflow"):
+        for node in wf.attrs.get("nodes", []):
+            if node.get("type") != "CC":
+                continue
+            cc = g.nodes.get(node.get("code", ""))
+            if cc is None or cc.interface is None:
+                continue
+            ext = [p.name for p in cc.interface.ports if p.direction == "in"]
+            if ext:
+                node["inputs"] = {name: f"$.payload.{name}" for name in ext}
+
+
 def _routing_outcomes(routing: str) -> list[str]:
     outs = re.findall(r"([A-Z_]+)\s*->", routing or "")
     return list(dict.fromkeys(outs)) or ["SUCCESS"]
@@ -554,6 +659,7 @@ LOWERING_PIPELINE = [
     ("TYPE_PROPAGATION", type_propagation_pass),
     ("STORE_JOIN", store_join_pass),
     ("SURFACE_DERIVATION", surface_derivation_pass),
+    ("WF_PAYLOAD_BINDING", wf_binding_pass),
 ]
 
 # rule → the constraint it serves (compiler metadata; the CLI reports per-pass PASS/FAIL from this so
@@ -564,6 +670,7 @@ PASS_CONSTRAINT: dict[str, str | None] = {
     "TYPE_PROPAGATION": "TYPED_PORT",
     "STORE_JOIN": "STORE_RESOLVED",
     "SURFACE_DERIVATION": None,
+    "WF_PAYLOAD_BINDING": None,
 }
 
 
@@ -625,6 +732,46 @@ def validate(g: ConstructionGraph) -> list[Violation]:
     for e in g.by_role("INVOKES"):
         if e.to not in g.nodes:
             v.append(Violation("INVOKES_EXISTS", e.to, "target node missing", "GAP_IMPLEMENTATION"))
+
+    # INVOCATION_INTERFACE — every CC step's explicit invocation binding must satisfy the invoked
+    # capability's declared interface, uniformly for any capability kind (CT, CS, …): every REQUIRED
+    # formal input bound, each binding to a real formal from a real CC-local (or a literal), every
+    # produced CC-local surfaced from a real declared output, no unknown/duplicate. Fully generic —
+    # requiredness is interface data on the port (set by the loader), never a kind-branch here.
+    for step in g.by_concept("Step"):
+        cap = g.nodes.get(step.attrs.get("capability", ""))
+        cap_iface = (load_capability_interface(g.workspace, step.attrs.get("capability", ""),
+                                               operation=step.attrs.get("operation"))
+                     if cap is not None and cap.concept == "CapabilityReference"
+                     else (cap.interface if cap is not None else None))
+        if cap_iface is None:
+            continue
+        in_ports = [p for p in cap_iface.ports if p.direction == "in"]
+        decl_in = {p.name for p in in_ports}
+        decl_out = {p.name for p in cap_iface.ports if p.direction == "out" and p.name not in _CONTROL_FIELDS}
+        bound_in = (step.attrs.get("interface") or {}).get("inputs") or {}
+        bound_out = (step.attrs.get("interface") or {}).get("outputs") or {}
+        consumes = {p.name for p in step.interface.ports if p.direction == "in"}
+        produces = {p.name for p in step.interface.ports if p.direction == "out"}
+        for p in in_ports:                                       # every REQUIRED formal input bound
+            if p.required and p.name not in bound_in:
+                v.append(Violation("INVOCATION_INTERFACE", step.id, f"unbound required input {p.name!r}", "GAP_DOSSIER"))
+        for formal, source in bound_in.items():                  # no unknown formal; reference to a real CC-local
+            expr = expression.parse_compact(source)
+            if formal not in decl_in:
+                v.append(Violation("INVOCATION_INTERFACE", step.id, f"binding to unknown input {formal!r}", "GAP_DOSSIER"))
+            elif isinstance(expr, expression.Reference) and expr.path not in consumes:
+                v.append(Violation("INVOCATION_INTERFACE", step.id, f"input {formal!r} bound to unknown CC-local {source!r}", "GAP_DOSSIER"))
+        if len(set(bound_in.values())) != len(bound_in):         # no duplicate input source
+            v.append(Violation("INVOCATION_INTERFACE", step.id, "duplicate input binding source", "GAP_DOSSIER"))
+        for formal, cc_local in bound_out.items():               # mapped output exists / targets a real CC-local
+            if formal not in decl_out:
+                v.append(Violation("INVOCATION_INTERFACE", step.id, f"binding from unknown output {formal!r}", "GAP_DOSSIER"))
+            elif cc_local not in produces:
+                v.append(Violation("INVOCATION_INTERFACE", step.id, f"output {formal!r} bound to unknown CC-local {cc_local!r}", "GAP_DOSSIER"))
+        for pf in produces:                                      # every produced CC-local is mapped
+            if pf not in bound_out.values():
+                v.append(Violation("INVOCATION_INTERFACE", step.id, f"produced CC-local {pf!r} has no output binding", "GAP_DOSSIER"))
     return v
 
 
@@ -646,6 +793,21 @@ def _jsonpath(binding: str, producer_port_id: str) -> str:
     return f"$.results.s{step_no}.{field_name}"
 
 
+def _eval_binding(step: "Node", source: str, inedges: dict[str, list["Edge"]]) -> Any:
+    """Evaluate an invocation input-binding expression to its lowered value, in the *construction*
+    context: a `Literal` → its value; a `Reference` → the JSONPath of the named CC-local's producer
+    (external CC input or a prior step's output) along the dataflow graph. Grammar is the shared
+    `engine.expression` module (one grammar, many consumers); only the reference-resolution context is
+    local here."""
+    def _resolve_reference(cc_local: str) -> Any:
+        port = step.interface.port(cc_local, "in") if step.interface else None
+        edges = inedges.get(port.id) if port else None
+        e = edges[0] if edges else None
+        return _jsonpath(e.attrs.get("binding", "input"), e.frm) if e else None
+
+    return expression.evaluate(expression.parse_compact(source), _resolve_reference)
+
+
 def cc_contract(g: ConstructionGraph, cc: Node) -> dict[str, Any]:
     """Build the CC Artifact Contract from the fully-lowered subgraph (the object the PAS renders)."""
     port_index = {p.id: p for n in g.nodes.values() if n.interface for p in n.interface.ports}
@@ -655,11 +817,23 @@ def cc_contract(g: ConstructionGraph, cc: Node) -> dict[str, Any]:
 
     pipeline = []
     for step in g.contained_steps(cc.id):
-        inputs = {}
-        for p in [p for p in step.interface.ports if p.direction == "in"]:
-            e = (inedges.get(p.id) or [None])[0]
-            inputs[p.name] = _jsonpath(e.attrs.get("binding", "input"), e.frm) if e else None
-        outputs = {p.name: {"from": "step"} for p in step.interface.ports if p.direction == "out"}
+        iface = step.attrs.get("interface") or {}
+        if iface:
+            # Materialize the invocation interface (validated by INVOCATION_INTERFACE) — capability-kind
+            # agnostic: step inputs are keyed by the invoked capability's FORMAL parameter (CT or CS),
+            # valued by the bound source (a prior/external CC-local's JSONPath, or a literal); each output
+            # surfaces the capability's declared output field into its bound CC-local via the runtime's
+            # `$.capability_result.<field>` convention. No name-identity assumption, no kind-branch.
+            inputs = {formal: _eval_binding(step, source, inedges)
+                      for formal, source in (iface.get("inputs") or {}).items()}
+            outputs = {cc_local: f"$.capability_result.{formal}"
+                       for formal, cc_local in (iface.get("outputs") or {}).items()}
+        else:
+            inputs = {}
+            for p in [p for p in step.interface.ports if p.direction == "in"]:
+                e = (inedges.get(p.id) or [None])[0]
+                inputs[p.name] = _jsonpath(e.attrs.get("binding", "input"), e.frm) if e else None
+            outputs = {p.name: {"from": "step"} for p in step.interface.ports if p.direction == "out"}
         access = next((a for a in g.by_role("ACCESSES") if a.frm == step.id), None)
         pipeline.append({
             "step": f"s{step.attrs['index']}", "kind": step.attrs["kind"],
@@ -717,6 +891,32 @@ def rb_contract(node: Node) -> dict[str, Any]:
     }
 
 
+def structure_contract(node: Node) -> dict[str, Any]:
+    """The STRUCTURE Artifact Contract from a StorageStructure node (the object the PAS renders)."""
+    return {
+        "code": node.attrs["code"], "summary": node.attrs.get("summary", node.attrs["code"]),
+        "domain": node.attrs.get("domain"), "subdomain": node.attrs.get("subdomain"),
+        "stores": node.attrs.get("stores", []),
+    }
+
+
+def ev_contract(node: Node) -> dict[str, Any]:
+    """The EV Artifact Contract from an Event node (the object the semantic renderer joins + renders)."""
+    return {
+        "code": node.attrs["code"], "summary": node.attrs.get("summary", node.attrs["code"]),
+        "payload": node.attrs.get("payload", []),
+        "emitted_by": node.attrs.get("emitted_by", []),
+    }
+
+
+# The artifact families the Construction Compiler (S8) renders today. The AUTHORITATIVE source is
+# serialize() below — one renderer branch per family; keep this in lockstep. A supplementary artifact
+# whose family is NOT in this set is an UNRENDERED_FAMILY construction gap (S8 cannot yet produce it);
+# one whose family IS here was supplied for a different reason (reused / cross-domain). Consumed by the
+# admission gate to classify supplementary artifacts and score construction completeness.
+RENDERED_FAMILIES: frozenset[str] = frozenset({"CC", "CT", "IN", "WF", "RB", "STRUCTURE", "EV"})
+
+
 def serialize(g: ConstructionGraph, violations: list[Violation]) -> dict[str, Any]:
     """Serialize each constructible node whose subgraph is constraint-clean, routing each concept to its
     per-kind PAS renderer. A node with any violation is not serializable (a gap). Returns
@@ -745,6 +945,20 @@ def serialize(g: ConstructionGraph, violations: list[Violation]) -> dict[str, An
     # RB family (binding) — the runtime binding document that closes the execution cluster
     for node in g.by_concept("RuntimeBinding"):
         out[node.id] = RBRenderer().render(rb_contract(node))
+    # STRUCTURE family (storage topology) — a template renderer over the declared store set
+    for node in g.by_concept("StorageStructure"):
+        out[node.id] = StructureRenderer().render(structure_contract(node))
+    # EV family (observation) — a SEMANTIC renderer: payload + emitter must be declared upstream, never
+    # inferred. Absent semantics ⇒ a gap (not a fabricated artifact), mirroring the CT typed-interface gate.
+    for node in g.by_concept("Event"):
+        ev_viols = []
+        if not node.attrs.get("payload"):
+            ev_viols.append(Violation("EV_PAYLOAD_DECLARED", node.id,
+                                      "no payload schema declared (S6b.events)", "GAP_DOSSIER"))
+        if not node.attrs.get("emitted_by"):
+            ev_viols.append(Violation("EV_EMITTER_DECLARED", node.id,
+                                      "no emitter declared (S6b.execution_outputs)", "GAP_DOSSIER"))
+        out[node.id] = {"gap": ev_viols} if ev_viols else EVRenderer().render(ev_contract(node))
     return out
 
 
@@ -771,6 +985,8 @@ def build(handoff_dir: Path, *, domain: str, subdomain: str, workspace: Path) ->
     project_in(g, _rows(up, "new_intents"))                           # new intents (ingress) from authored intent
     project_wf(g, up)                                                  # new workflows (topology) from authored design
     project_rb(g, up)                                                  # new runtime bindings from authored declarations
+    project_structure(g, up, domain=domain, subdomain=subdomain)      # storage topology from authored store set
+    project_ev(g, up, domain=domain)                                   # events (semantic) from authored payload + emitter
     normalize(g)
     lower(g)
     violations = validate(g)

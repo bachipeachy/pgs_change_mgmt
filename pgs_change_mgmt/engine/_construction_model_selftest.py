@@ -37,8 +37,8 @@ def main() -> int:
 
     # 1 — Project
     concepts = Counter(n.concept for n in g.nodes.values())
-    assert concepts["CapabilityComposition"] == 3 and concepts["Step"] == 8, concepts
-    assert concepts["Capability"] == 2 and concepts["CapabilityReference"] == 2, concepts
+    assert concepts["CapabilityComposition"] == 4 and concepts["Step"] == 11, concepts
+    assert concepts["Capability"] == 4 and concepts["CapabilityReference"] == 2, concepts
     assert concepts["Store"] == 2, concepts
     print(f"  Project: {sum(concepts.values())} nodes {dict(concepts)}, {len(g.edges)} edges ✓")
 
@@ -59,7 +59,7 @@ def main() -> int:
     served = [nid for nid, a in r.artifacts.items() if isinstance(a, str)]
     ccs = [n for n in served if "::CC_" in n]
     cts = [n for n in served if "::CT_" in n]
-    assert len(ccs) == 3 and len(cts) == 2, f"expected 3 CC + 2 CT, got {len(ccs)}CC/{len(cts)}CT: {served}"
+    assert len(ccs) == 4 and len(cts) == 4, f"expected 4 CC + 4 CT, got {len(ccs)}CC/{len(cts)}CT: {served}"
     print(f"  Validate: 0 violations (D4 closed); {len(ccs)} CC + {len(cts)} CT serialized (CT dependency closure) ✓")
 
     # 4 — Serialize: real admissible CC + CT markdown from declared types (no injection); machine blocks parse

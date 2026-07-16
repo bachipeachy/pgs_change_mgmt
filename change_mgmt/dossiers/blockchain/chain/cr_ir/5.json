@@ -166,5 +166,12 @@
       "source_finding": "S4 gap_register GAP-6"
     }
   ],
-  "cross_subdomain_refs": []
+  "cross_subdomain_refs": [
+    {
+      "cc_code": "NONE IDENTIFIED",
+      "defined_in": "",
+      "role": "",
+      "source_finding": ""
+    }
+  ]
 }

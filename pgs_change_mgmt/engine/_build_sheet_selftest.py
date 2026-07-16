@@ -56,7 +56,7 @@ def main() -> int:
     by = {s.code: s for s in model.sheets}
 
     print(f"  projected {len(model.sheets)} sheets; set readiness = {model.readiness()}")
-    assert len(model.sheets) == 13, f"expected 13 sheets (S7 build_order), got {len(model.sheets)}"
+    assert len(model.sheets) == 16, f"expected 16 sheets (S7 build_order), got {len(model.sheets)}"
 
     # commit cluster CCs are fully composed → pipeline present, BUILDABLE
     for cc in ("CC_COMMIT_BLOCK_CANONICAL_V0", "CC_VALIDATE_PREDECESSOR_LINK_V0"):
@@ -75,31 +75,46 @@ def main() -> int:
     assert p.sources, "purpose must carry provenance sources, not invented prose"
     print(f"  purpose is referenced not invented: {p.confidence} ← {p.sources} ✓")
 
-    # the projection refuses to invent: EV emitter is undeclared upstream → GAP_IMPLEMENTATION
+    # every governed fact lands: the EV's payload (S6b.events) and emitter (S6b.execution_outputs) RESOLVE
+    # from upstream — a pure join (events ⋈ execution_outputs on ev_code == output_code), no invention, no
+    # residual gap. The full chain corpus is construction-closed at the build-sheet level.
     ev = by["EV_GENESIS_CREATED_V0"]
-    assert ev.part_b["emitted_by"].status == GAP, "EV emitter should be a GAP (no emitter declared)"
-    assert any(g.gap_class == "GAP_IMPLEMENTATION" for g in ev.gaps), "EV emitter GAP must be classified"
-    print("  EV_GENESIS_CREATED emitter undeclared → GAP_IMPLEMENTATION (not invented) ✓")
+    assert ev.part_b["payload"].status == OK, f"EV payload should resolve from S6b.events: {ev.part_b['payload']}"
+    assert ev.part_b["emitted_by"].status == OK, f"EV emitter should resolve from S6b.execution_outputs: {ev.part_b['emitted_by']}"
+    assert ev.part_b["emitted_by"].value == ["blockchain::CC_CREATE_GENESIS_BLOCK_V0"], "emitter joined on output_code == ev_code"
+    assert not ev.gaps, f"resolved EV carries no gap: {ev.gaps}"
+    assert not model.gap_census, f"complete corpus → empty gap census, got {model.gap_census}"
+    print("  EV_GENESIS_CREATED payload+emitter RESOLVED from S6b (events ⋈ execution_outputs) → no gap ✓")
 
-    assert model.gap_census, "gap census should surface the unresolved fields"
+    # every missing fact is a GAP, never invented: strip the two EV registers and the projection reports
+    # AUTHORABLE dossier gaps — GAP_DOSSIER (not GAP_IMPLEMENTATION now that emission is declarable, and
+    # never a fabricated value).
+    up_missing = {k: v for k, v in up.items() if k not in ("events", "execution_outputs")}
+    ev_missing = {s.code: s for s in
+                  project_build_sheets(up_missing, domain="blockchain", subdomain="chain").sheets}["EV_GENESIS_CREATED_V0"]
+    g_missing = {g.field: g.gap_class for g in ev_missing.gaps}
+    assert ev_missing.part_b["emitted_by"].status == GAP and g_missing.get("emitted_by") == "GAP_DOSSIER", \
+        f"missing emitter → authorable GAP_DOSSIER: {g_missing}"
+    assert ev_missing.part_b["payload"].status == GAP and g_missing.get("payload") == "GAP_DOSSIER", \
+        f"missing payload → authorable GAP_DOSSIER: {g_missing}"
+    print("  strip S6b.events/execution_outputs → EV payload+emitter become GAP_DOSSIER (authorable, not invented) ✓")
 
-    # static gate: ASSERT_CONSTRUCTION_CLOSED raises clean sheets BUILDABLE → CONSTRUCTION_READY
+    # static gate: ASSERT_CONSTRUCTION_CLOSED raises clean sheets BUILDABLE → CONSTRUCTION_READY. With the
+    # corpus complete, the commit cluster AND the resolved genesis EV all reach the gate.
     from ..evaluator.build_sheet_oracle import assert_construction_closed
     issues = assert_construction_closed(model)
-    for cc in ("CC_COMMIT_BLOCK_CANONICAL_V0", "CC_VALIDATE_PREDECESSOR_LINK_V0"):
-        assert by[cc].readiness == CONSTRUCTION_READY, \
-            f"{cc} should reach CONSTRUCTION_READY: {[m for c, m in issues if c == cc]}"
-    assert any(c == "EV_GENESIS_CREATED_V0" for c, _ in issues), "genesis EV must fail the static gate (open GAP)"
-    assert by["EV_GENESIS_CREATED_V0"].readiness != CONSTRUCTION_READY, "genesis EV must not be READY"
-    print(f"  ASSERT_CONSTRUCTION_CLOSED: commit cluster → CONSTRUCTION_READY; "
-          f"{len(issues)} open issue(s) keep genesis below the gate ✓")
+    for code in ("CC_COMMIT_BLOCK_CANONICAL_V0", "CC_VALIDATE_PREDECESSOR_LINK_V0", "EV_GENESIS_CREATED_V0"):
+        assert by[code].readiness == CONSTRUCTION_READY, \
+            f"{code} should reach CONSTRUCTION_READY: {[m for c, m in issues if c == code]}"
+    print(f"  ASSERT_CONSTRUCTION_CLOSED: commit cluster + resolved genesis EV → CONSTRUCTION_READY; "
+          f"{len(issues)} open issue(s) ✓")
 
     md = render_markdown(model)
     assert md.startswith("# Build Sheet Set: blockchain / chain"), "markdown render header"
     assert "Part A — Governing Truth" in md and "GAP Census" in md, "render structure"
     print(f"  render_markdown OK ({len(md)} chars); gap_census = {len(model.gap_census)} entries")
 
-    print("\nBUILD SHEET PROJECTION PROOF OK ✓ — projected S2/S5/S6b/S7 → 13 sheets, provenance-tracked, "
+    print("\nBUILD SHEET PROJECTION PROOF OK ✓ — projected S2/S5/S6b/S7 → 16 sheets, provenance-tracked, "
           "gap-classified, model→markdown; assembled not authored.")
     return 0
 

@@ -1,60 +1,4 @@
 {
-  "belief_verification": [
-    {
-      "belief": "The current implementation does not yet provide a chain that commits proposed blocks.",
-      "result": "VERIFIED",
-      "evidence": "No capability or workflow commits a proposed block; concept COMMIT resolves to 0 artifacts. A block-committed event exists but nothing emits it: blockchain::EV_BLOCK_COMMITTED_V0.",
-      "source_finding": "S1 system_beliefs #1; projection absent[COMMIT]"
-    },
-    {
-      "belief": "A consensus loop already exists that proposes blocks and drives slot processing.",
-      "result": "VERIFIED",
-      "evidence": "blockchain::WF_RUN_CONSENSUS_LOOP_V0, blockchain::WF_RUN_CONSENSUS_SLOTS_V0, blockchain::WF_PROCESS_SLOT_V0",
-      "source_finding": "S1 system_beliefs #2"
-    },
-    {
-      "belief": "A block-proposal capability already exists.",
-      "result": "VERIFIED",
-      "evidence": "blockchain::WF_PROPOSE_BLOCK_V0, blockchain::CC_FORM_BLOCK_V0, blockchain::CC_INVOKE_BLOCK_PROPOSAL_V0, blockchain::EV_BLOCK_PROPOSED_V0",
-      "source_finding": "S1 system_beliefs #3"
-    },
-    {
-      "belief": "A validator registry already exists.",
-      "result": "VERIFIED",
-      "evidence": "blockchain::WF_REGISTER_VALIDATOR_V0, blockchain::CC_WRITE_VALIDATOR_RECORD_V0, blockchain::CC_QUERY_ELIGIBLE_VALIDATORS_V0, blockchain::CC_SELECT_PROPOSER_V0",
-      "source_finding": "S1 system_beliefs #4"
-    },
-    {
-      "belief": "A wallet capability already exists.",
-      "result": "VERIFIED",
-      "evidence": "blockchain::WF_CREATE_WALLET_V0, blockchain::CC_CREATE_WALLET_RECORD_V0, blockchain::ENTITY_WALLET_V0",
-      "source_finding": "S1 system_beliefs #5"
-    },
-    {
-      "belief": "A transaction capability already exists.",
-      "result": "VERIFIED",
-      "evidence": "blockchain::WF_SUBMIT_TRANSACTION_V0, blockchain::ENTITY_TRANSACTION_V0, blockchain::CC_SIGN_TRANSACTION_V0, blockchain::CC_HASH_TRANSACTION_V0",
-      "source_finding": "S1 system_beliefs #6"
-    },
-    {
-      "belief": "A mempool already exists.",
-      "result": "VERIFIED",
-      "evidence": "blockchain::CC_WRITE_MEMPOOL_TX_V0, blockchain::CC_QUERY_MEMPOOL_TXS_V0, blockchain::CC_DRAIN_MEMPOOL_V0, blockchain::CC_CLAIM_MEMPOOL_TXS_V0",
-      "source_finding": "S1 system_beliefs #7"
-    },
-    {
-      "belief": "An orchestration subdomain already exists.",
-      "result": "VERIFIED",
-      "evidence": "blockchain::WF_RUN_CHAIN_SIMULATION_V0, blockchain::CC_RUN_SLOT_SEQUENCE_V0, blockchain::STRUCTURE_BLOCKCHAIN_ORCHESTRATION_STORAGE_V0",
-      "source_finding": "S1 system_beliefs #8"
-    },
-    {
-      "belief": "Adjacent subdomains exist: identity, wallet, transaction, mempool, consensus, orchestration.",
-      "result": "VERIFIED",
-      "evidence": "identity via blockchain::ENTITY_ACTOR_V0; wallet via blockchain::ENTITY_WALLET_V0; transaction via blockchain::ENTITY_TRANSACTION_V0; mempool via blockchain::CC_WRITE_MEMPOOL_TX_V0; consensus via blockchain::WF_RUN_CONSENSUS_LOOP_V0; orchestration via blockchain::WF_RUN_CHAIN_SIMULATION_V0",
-      "source_finding": "S1 system_beliefs #9"
-    }
-  ],
   "entities": [
     {
       "entity": "Chain",
@@ -193,6 +137,62 @@
       "record_produced": "Reconciled wallet balances and a balance-reconciled event.",
       "evidence_status": "PARTIAL",
       "source_finding": "S1 known_facts #11; a balance-reconciled event exists (blockchain::EV_BALANCE_RECONCILED_V0)"
+    }
+  ],
+  "belief_verification": [
+    {
+      "belief": "The current implementation does not yet provide a chain that commits proposed blocks.",
+      "result": "VERIFIED",
+      "evidence": "No capability or workflow commits a proposed block; concept COMMIT resolves to 0 artifacts. A block-committed event exists but nothing emits it: blockchain::EV_BLOCK_COMMITTED_V0.",
+      "source_finding": "S1 system_beliefs #1; projection absent[COMMIT]"
+    },
+    {
+      "belief": "A consensus loop already exists that proposes blocks and drives slot processing.",
+      "result": "VERIFIED",
+      "evidence": "blockchain::WF_RUN_CONSENSUS_LOOP_V0, blockchain::WF_RUN_CONSENSUS_SLOTS_V0, blockchain::WF_PROCESS_SLOT_V0",
+      "source_finding": "S1 system_beliefs #2"
+    },
+    {
+      "belief": "A block-proposal capability already exists.",
+      "result": "VERIFIED",
+      "evidence": "blockchain::WF_PROPOSE_BLOCK_V0, blockchain::CC_FORM_BLOCK_V0, blockchain::CC_INVOKE_BLOCK_PROPOSAL_V0, blockchain::EV_BLOCK_PROPOSED_V0",
+      "source_finding": "S1 system_beliefs #3"
+    },
+    {
+      "belief": "A validator registry already exists.",
+      "result": "VERIFIED",
+      "evidence": "blockchain::WF_REGISTER_VALIDATOR_V0, blockchain::CC_WRITE_VALIDATOR_RECORD_V0, blockchain::CC_QUERY_ELIGIBLE_VALIDATORS_V0, blockchain::CC_SELECT_PROPOSER_V0",
+      "source_finding": "S1 system_beliefs #4"
+    },
+    {
+      "belief": "A wallet capability already exists.",
+      "result": "VERIFIED",
+      "evidence": "blockchain::WF_CREATE_WALLET_V0, blockchain::CC_CREATE_WALLET_RECORD_V0, blockchain::ENTITY_WALLET_V0",
+      "source_finding": "S1 system_beliefs #5"
+    },
+    {
+      "belief": "A transaction capability already exists.",
+      "result": "VERIFIED",
+      "evidence": "blockchain::WF_SUBMIT_TRANSACTION_V0, blockchain::ENTITY_TRANSACTION_V0, blockchain::CC_SIGN_TRANSACTION_V0, blockchain::CC_HASH_TRANSACTION_V0",
+      "source_finding": "S1 system_beliefs #6"
+    },
+    {
+      "belief": "A mempool already exists.",
+      "result": "VERIFIED",
+      "evidence": "blockchain::CC_WRITE_MEMPOOL_TX_V0, blockchain::CC_QUERY_MEMPOOL_TXS_V0, blockchain::CC_DRAIN_MEMPOOL_V0, blockchain::CC_CLAIM_MEMPOOL_TXS_V0",
+      "source_finding": "S1 system_beliefs #7"
+    },
+    {
+      "belief": "An orchestration subdomain already exists.",
+      "result": "VERIFIED",
+      "evidence": "blockchain::WF_RUN_CHAIN_SIMULATION_V0, blockchain::CC_RUN_SLOT_SEQUENCE_V0, blockchain::STRUCTURE_BLOCKCHAIN_ORCHESTRATION_STORAGE_V0",
+      "source_finding": "S1 system_beliefs #8"
+    },
+    {
+      "belief": "Adjacent subdomains exist: identity, wallet, transaction, mempool, consensus, orchestration.",
+      "result": "VERIFIED",
+      "evidence": "identity via blockchain::ENTITY_ACTOR_V0; wallet via blockchain::ENTITY_WALLET_V0; transaction via blockchain::ENTITY_TRANSACTION_V0; mempool via blockchain::CC_WRITE_MEMPOOL_TX_V0; consensus via blockchain::WF_RUN_CONSENSUS_LOOP_V0; orchestration via blockchain::WF_RUN_CHAIN_SIMULATION_V0",
+      "source_finding": "S1 system_beliefs #9"
     }
   ],
   "pps_baseline_fqdns": [

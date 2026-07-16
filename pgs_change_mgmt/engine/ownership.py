@@ -27,10 +27,18 @@ class Owner:
     layer: str                # the governed layer (BLOCKCHAIN, REUSABLE_TRANSFORMS, …)
     repo_root: Path           # mount root — the dir containing the importable package (on PYTHONPATH)
     package: str              # the importable package name (pgs_blockchain, pgs_transforms, …)
+    implementation_namespace: str  # governed intra-package impl layout (capability_transforms.atoms, …)
 
     @property
     def registry_root(self) -> Path:
         return self.repo_root / self.package / "registry"
+
+    def implementation_module(self, code: str) -> str:
+        """Materialize the fully-qualified implementation module path for a capability `code`.
+
+        Pure materialization — the physical layout (package · implementation_namespace) is governed
+        metadata resolved through ownership; this method embeds zero knowledge of it."""
+        return f"{self.package}.implementation.{self.implementation_namespace}.{code.lower()}"
 
 
 @lru_cache(maxsize=1)
@@ -45,5 +53,8 @@ def resolve(fqdn: str) -> Owner:
     layer = _NAMESPACE_LAYER.get(ns)
     if not layer:
         raise KeyError(f"no governed owner for namespace {ns!r} (fqdn {fqdn})")
-    pkg_dir = _layer_resolver().resolve_layer_repo_root(layer)     # e.g. …/pgs_blockchain/pgs_blockchain
-    return Owner(namespace=ns, layer=layer, repo_root=pkg_dir.parent, package=pkg_dir.name)
+    resolver = _layer_resolver()
+    pkg_dir = resolver.resolve_layer_repo_root(layer)             # e.g. …/pgs_blockchain/pgs_blockchain
+    impl_ns = resolver.resolve_layer_implementation_namespace(layer)
+    return Owner(namespace=ns, layer=layer, repo_root=pkg_dir.parent, package=pkg_dir.name,
+                 implementation_namespace=impl_ns)

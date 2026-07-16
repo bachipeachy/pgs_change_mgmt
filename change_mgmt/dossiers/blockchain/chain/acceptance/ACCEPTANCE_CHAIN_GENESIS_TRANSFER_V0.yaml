@@ -1,0 +1,54 @@
+# S7 acceptance artifact — two separated concerns (the CR owns both; the engine owns neither):
+#   acceptance_intent    — WHY we validate: business objective + success criteria (no payloads/paths)
+#   acceptance_scenario  — HOW we validate: the executable realization that must PROVE the intent
+# Every scenario element declares which success criteria it `satisfies`; validation is PASS only when
+# every declared criterion is proven by a passing element (ACCEPTANCE_INTENT_COVERAGE).
+scenario_code: ACCEPTANCE_CHAIN_GENESIS_TRANSFER_V0
+version: v0
+subject: blockchain::chain
+
+# ─────────────── Acceptance Intent (business language — no workflows, payloads, JSON, or paths) ──────
+acceptance_intent:
+  objective: Chain initialization and first transfer shall produce a valid ledger state.
+  success_criteria:
+    - id: SC1
+      statement: Genesis initialization succeeds.
+    - id: SC2
+      statement: The first block commit succeeds.
+    - id: SC3
+      statement: The ledger reflects the committed transactions.
+    - id: SC4
+      statement: The chain grows (a block is committed onto the genesis chain).
+
+# ─────────────── Acceptance Scenario (executable realization that satisfies the intent) ──────────────
+acceptance_scenario:
+  steps:
+    - step: s1
+      workflow: blockchain::WF_BOOTSTRAP_GENESIS_CHAIN_V0
+      payload:
+        genesis_block_content:
+          predecessor_hash: { literal: "0x0000000000000000000000000000000000000000000000000000000000000000" }
+          height: { literal: 0 }
+          transactions:
+            - { tx_type: MINT, amount: 1000, from_wallet: null, to_wallet: W_GENESIS }
+      expect_outcome: SUCCESS
+      satisfies: [SC1]
+
+    - step: s2
+      workflow: blockchain::WF_COMMIT_BLOCK_V0
+      payload:
+        proposed_block:
+          predecessor_hash: { ref: "$.steps.s1.store.chain_head.head" }
+          height: { literal: 1 }
+          transactions:
+            - { tx_type: TRANSFER, amount: 250, from_wallet: W_GENESIS, to_wallet: W_ALICE }
+      expect_outcome: SUCCESS
+      satisfies: [SC2]
+
+  observations:
+    - address: "$.steps.s2.surface.reconciled_balances"
+      expected: { W_GENESIS: 750, W_ALICE: 250 }
+      satisfies: [SC3]
+    - address: "$.steps.s2.store.chain.count"
+      expected: 2
+      satisfies: [SC4]

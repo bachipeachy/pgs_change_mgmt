@@ -1,6 +1,3 @@
-w
-in test
-
 # pgs_change_mgmt
 
 **Governed SDLC change-management pipeline for Protocol-Governed Systems.**
@@ -209,6 +206,134 @@ alone. Everything after is **as-built reality**, produced by the authoring tier:
 
 So: **the dossier proves the design; the authoring tier proves the build.** The manifest is the
 seam between them — which is why it is a *post-authoring* artifact, not a dossier stage.
+
+### The Snapshot Admission Gate
+
+When the protocol delta is produced by the **Construction Compiler** (the deterministic Stage-8
+path) rather than hand-authored, steps 2–4 above are consolidated into one repeatable, non-mutating
+gate that runs **before any implementation work**:
+
+> *Can this protocol delta be admitted into a protocol snapshot?*
+
+The gate forms a **Compilation Unit** and hands it to the real `pgs_compiler`:
+
+```
+Compilation Unit  =  Baseline Overlay  ∪  Generated Delta  ∪  Supplementary Artifacts
+```
+
+- **Baseline Overlay** — read-only copies of the owning repos' canonical registries.
+- **Generated Delta** — the artifacts the Construction Compiler produced from the CR-IR.
+- **Supplementary Artifacts** — artifacts that must travel with the unit but were not generated:
+  reused libraries or shared cross-domain artifacts. The compiler is **origin-agnostic** — it never
+  learns *why* an artifact is present. *(Historically this also covered a `construction_gap/` of
+  families S8 could not yet render; the blockchain/chain CR closed that gap — S8 now renders all its
+  families, so it admits with zero supplementary. See the S8 renderer taxonomy below.)*
+
+```bash
+PGS_WORKSPACE=/abs python -m pgs_change_mgmt.engine.construction_cli admit \
+    --projection <dossier>/cr_ir [--include <supplementary_dir>] \
+    --domain <domain> --subdomain <subdomain>
+# → Construction Status : CONSTRUCTION COMPLETE      (verdict first)
+# → Admission Status    : PASS                        (exit 0; 2 = rejected)
+# → Completeness        : 16 / 16  (100%)
+```
+
+The report **leads with the verdict, not the count**. Two distinct states:
+
+- **Construction Status** — did S8 *generate* everything this CR needs? `CONSTRUCTION COMPLETE` iff no
+  supplementary artifact is an `UNRENDERED_FAMILY`. This is the S8-maturity result: `0 supplementary` is
+  not bookkeeping, it is *evidence* that the whole protocol delta was produced deterministically.
+- **Admission Status** — does the Protocol Compiler *accept* the unit? `PASS` / `FAIL`.
+
+Supplementary artifacts are **classified**, so a non-zero count is diagnostic: `UNRENDERED_FAMILY` (a real
+construction gap — S8 can't render that family yet; counts against completeness), `EXTERNAL_LIBRARY` (a
+reused cross-domain artifact; a legitimate dependency, excluded from the completeness score), or
+`SHARED_BASELINE`. **Completeness** = `generated / (generated + unrendered_family)` — the KPI that read
+14/16 (87.5%) before STRUCTURE landed, 15/16 (93.8%) after, and 16/16 (100%) once EV closed the gap.
+
+- **Repeatable** — the delta is reconstructed from the CR-IR each run; nothing is CR-specific.
+- **Zero-pollution** — assembled in a throwaway temp federation and torn down; `protocol_snapshot/`
+  and the canonical repos are byte-identical before and after.
+- **No implementations required** — admission is compile-time. A CT contract *declares* its
+  `implementation.module`; the compiler records the reference but never imports it. Missing CT/CS
+  implementations block Execution Validation (a later phase), not admission.
+
+Supply supplementary artifacts with `--include DIR` (repeatable); each file is namespace-qualified by
+the snapshot convention `<namespace>__<CODE>.md`, so it self-declares its FQDN and is placed by
+ownership resolution — no per-CR wiring. Locked offline by `scripts/verify_change_mgmt_engine.sh` §14.
+
+**Persisting the admitted unit** — add `--persist DIR` to write the admitted Compilation Unit to disk
+as a **complete test-snapshot candidate** (an isolated full build; compiles every structure so the
+delta rides inside a whole snapshot). The Implementation and Execution-Validation phases consume *this
+exact snapshot* — the chain of custody is `Constructed Delta → Admitted Compilation Unit → Executed
+Snapshot → Promoted Baseline`, with no recompilation at promotion.
+
+```bash
+PGS_WORKSPACE=/abs python -m pgs_change_mgmt.engine.construction_cli admit \
+    --projection <dossier>/cr_ir [--include <supplementary_dir>] \
+    --domain <domain> --subdomain <subdomain> --persist /abs/test_ws
+# → Construction Status : CONSTRUCTION COMPLETE
+# → Admission Status    : PASS
+# → Snapshot Status     : ADMITTED_UNVALIDATED
+```
+
+The snapshot is marked **`ADMITTED_UNVALIDATED`**, never `VALID`: it is admissible at compile time, but
+runtime conformance (`pi validate --strict`, `pgs_runtime run`) executes CT/CS *implementations*, which
+admission does not require. Those checks run in the **Execution Validation** phase, after the missing
+implementations are authored and `pgs build` marks the snapshot `VALID`. Zero-pollution: the whole build
+happens under an isolated federation base; the canonical repos are untouched.
+
+### CR Lifecycle — five states, the first three enforced as gates
+
+A change request moves through five **machine-distinguishable** states, each a stronger claim than the
+last. These states *emerged from implementation* — they were not invented up front. The first three are
+enforced as gates today; the last two are the Execution-Validation and Promotion phases.
+
+```
+DRAFT
+  ↓   guided authoring → CR-IR
+CONSTRUCTION_COMPLETE   ← S8 generated every artifact the CR needs (0 UNRENDERED_FAMILY)   [GATE ✓]
+  ↓   admission (Protocol Admission Certificate)
+ADMITTED_UNVALIDATED    ← the Protocol Compiler accepts the Compilation Unit                [GATE ✓]
+  ↓   implementation + execution
+EXECUTION_VALIDATED     ← CT/CS impls present; conformance + runtime pass                   [gate — next]
+  ↓   promotion
+PROMOTED                ← merged into the canonical baseline
+```
+
+`ADMITTED_UNVALIDATED` is a **protocol lifecycle state, not merely a snapshot attribute**: it names a
+delta that is construction-complete and compile-admitted but not yet execution-validated. The **Protocol
+Admission Certificate** (the report above) is the artifact that certifies the transition
+`CONSTRUCTION_COMPLETE → ADMITTED_UNVALIDATED`. The output of Change Management is precisely this: *an
+admitted protocol delta* — everything downstream (implementation, execution, promotion) is a separate
+concern. `Construction Status : CONSTRUCTION COMPLETE` is no longer an aspiration or a design principle;
+it is a machine-verifiable property.
+
+### S8 Renderer Taxonomy — three ways an artifact family is constructed
+
+Every family the Construction Compiler emits is rendered by exactly one of three renderer classes. The
+class determines what the CR-IR must carry: *construction is compilation, never interpretation.*
+
+| Class | Families | What it needs from the CR-IR | On missing input |
+|-------|----------|------------------------------|------------------|
+| **Template** | STRUCTURE | Only the CR-specific table (store set); doctrine/boilerplate are renderer constants | n/a — always constructible |
+| **Projection** | CC · WF · IN · RB · CT | Maps CR-IR registers directly onto artifact fields | reports a design gap |
+| **Semantic** | EV *(ASSERT, …)* | Requires protocol semantics declared upstream; joins them | **fails** — never infers |
+
+A **semantic** renderer is the strict one: it cannot manufacture its inputs. The EV renderer is a pure
+join of two S6b registers and refuses to fabricate either half:
+
+- **`events`** — the *protocol* viewpoint of an event: its payload schema (`field · type · required ·
+  format · description`). Deliberately distinct from **S4 `events`**, the *business* viewpoint (why the
+  event exists — its trigger and meaning). Two viewpoints, two registers, no conflation.
+- **`execution_outputs`** — the emission *relationship*: `producer · output_kind · output_code`. General
+  by design (`output_kind ∈ EVENT | STORE | ASSERT | …`) so emission scales without turning
+  `execution_topology` into a kitchen sink. Emission originates at the producer; the event stays ignorant
+  of who emits it (as a Store is ignorant of who writes it).
+
+`EV artifact = events ⋈ execution_outputs (on ev_code == output_code)` — no inference, no heuristics.
+When both halves are declared, the family is construction-complete; the `construction_gap/` directory
+that previously hand-supplied it goes empty and disappears.
 
 ---
 
