@@ -23,10 +23,12 @@ Exit codes:  0 = CONSTRUCTION_VALID   ·   2 = CONSTRUCTION_INVALID   ·   1 = u
 from __future__ import annotations
 
 import argparse
+import json
 import os
 from collections import Counter
 from pathlib import Path
 
+from . import governance_surface
 from .construction_model import build, LOWERING_PIPELINE, PASS_CONSTRAINT, RENDERED_FAMILIES
 
 VALID, INVALID = 0, 2
@@ -214,10 +216,33 @@ def cmd_admit(args) -> int:
         return INVALID
 
     adm = cu.admit(artifacts, domain=args.domain, subdomain=args.subdomain, structure=structure)
+    manifest_path = None
+    impact_path = None
+    impact_doc = None
+    if adm.ok and getattr(args, "out", None):
+        # Persist the Placement Manifest beside the finale set — the ownership decision, computed once
+        # here and consumed verbatim by promotion (never re-resolved downstream).
+        manifest_path = cu.write_placement_manifest(adm.unit, Path(args.out))
+        # Governance Impact — descriptive discovery of the surface additions this CR requires. Zero
+        # authority: governance decides; promotion refuses until the canonical surface satisfies it.
+        gi = {"domain": args.domain, "subdomain": args.subdomain,
+              "required_changes": governance_surface.impact([f for f in artifacts if governance_surface.is_ct(f)])}
+        if gi["required_changes"]["ct_surface"]:
+            impact_doc = gi
+            impact_path = Path(args.out) / "governance_impact.json"
+            impact_path.write_text(json.dumps(gi, indent=2) + "\n")
     print(_admission_report(delta, supplementary, origin, domain=args.domain,
                             admission="PASS" if adm.ok else "FAIL"))
     print()
     print(adm.manifest(structure=structure))
+    if manifest_path:
+        print(f"\n  Placement manifest : {manifest_path}")
+    if impact_path:
+        adds = [fq for ch in impact_doc["required_changes"]["ct_surface"] for fq in ch["add"]]
+        print(f"  Governance impact  : {impact_path}")
+        print(f"    ⚠ governance approval REQUIRED before promotion — {len(adds)} CT surface addition(s):")
+        for ch in impact_doc["required_changes"]["ct_surface"]:
+            print(f"      {ch['surface']} ({ch['package']}): {', '.join(ch['add'])}")
     if not adm.ok:
         print("\n  --- compiler diagnostics (tail) ---")
         for ln in adm.output.strip().splitlines()[-14:]:

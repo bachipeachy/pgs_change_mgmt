@@ -66,6 +66,7 @@ class Placement:
     owner_layer: str
     repo: str
     overlay: str            # path of the candidate within the mount, relative to the registry
+    registry_root: str = "" # governed owner registry root (absolute) — where a promotion writes this
 
 
 @dataclass
@@ -191,12 +192,70 @@ def assemble(artifacts: dict[str, str], *, domain: str, subdomain: str) -> Compi
         dest.parent.mkdir(parents=True, exist_ok=True)
         dest.write_text(md)
         unit.placements.append(Placement(fqdn, code, code.split("_", 1)[0],
-                                         owner.layer, m.repo, str(rel)))
+                                         owner.layer, m.repo, str(rel), str(owner.registry_root)))
     for ov in governance_surface.surface_overlays([f for f in artifacts if governance_surface.is_ct(f)]):
         m = _mount_package(unit, ov.package_dir)                          # surface's owner (may be pgs_governance)
         surf = m.view / ov.rel
         surf.write_text(governance_surface.compose(surf.read_text(), ov.entries))
     return unit
+
+
+# --- Placement Manifest: the ownership decision, computed once and persisted ------------------------
+#
+# Ownership Resolution (Phase 1) is the single authoritative place that answers *where does each
+# artifact belong*. The Placement Manifest persists that decision so every downstream concern —
+# promotion, packaging, release notes, impact analysis, dependency visualization — CONSUMES it rather
+# than re-resolving ownership. Compute once, persist, consume everywhere; never rediscover an
+# authoritative decision.
+
+PLACEMENT_MANIFEST = "placement_manifest.json"
+
+
+def build_plan(unit: CompilationUnit) -> dict:
+    """The declared REBUILD SCOPE — computed once here from ownership, consumed verbatim by promotion.
+
+    A delta that stays inside the constructed domain rebuilds only that domain's structure. A delta
+    that touches *any other namespace* — a domain-neutral / platform artifact such as a reusable
+    `capability_transforms::` transform — is platform-touching and rebuilds the whole platform (every
+    structure). Promotion executes this plan; it never re-derives whether a CR is "mixed" or decides
+    how much to rebuild. Scope is data, declared here; not logic, inferred there."""
+    domain = unit.domain
+    cross = sorted({p.fqdn.split("::", 1)[0] for p in unit.placements
+                    if p.fqdn.split("::", 1)[0] != domain})
+    if cross:
+        return {"mode": "all", "structures": [],
+                "reason": f"platform-touching — cross-namespace artifact(s): {', '.join(cross)}"}
+    return {"mode": "structures",
+            "structures": [f"STRUCTURE_BUILD_{domain.upper()}_CONFIG_V0"],
+            "reason": f"domain-only ({domain})"}
+
+
+def placement_manifest(unit: CompilationUnit) -> dict:
+    """The artifact-placement decision for a Compilation Unit, as a serializable manifest.
+
+    Each entry carries the governed destination — owner `registry_root` + registry-relative
+    `relative_path` — so a consumer writes `registry_root / relative_path` with zero ownership logic.
+    The `build_plan` declares the rebuild scope promotion must execute (compute once, consume there).
+    """
+    return {
+        "domain": unit.domain,
+        "subdomain": unit.subdomain,
+        "build_plan": build_plan(unit),
+        "placements": [
+            {"code": p.code, "fqdn": p.fqdn, "kind": p.kind, "owner_layer": p.owner_layer,
+             "package": p.repo, "registry_root": p.registry_root, "relative_path": p.overlay}
+            for p in sorted(unit.placements, key=lambda p: p.code)
+        ],
+    }
+
+
+def write_placement_manifest(unit: CompilationUnit, out_dir: Path) -> Path:
+    """Persist the Placement Manifest alongside the finale artifact set (the input to promotion)."""
+    out = Path(out_dir)
+    out.mkdir(parents=True, exist_ok=True)
+    path = out / PLACEMENT_MANIFEST
+    path.write_text(json.dumps(placement_manifest(unit), indent=2) + "\n")
+    return path
 
 
 # --- Phase 3: Protocol Compiler invocation (diagnostics only, no mutation) --------------------------

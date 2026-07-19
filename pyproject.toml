@@ -4,14 +4,17 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "pgs_change_mgmt"
-version = "0.7.0"
+version = "0.8.0"
 description = "PGS Change Management Engine — the governance projection engine: a worker-agnostic coordination layer over the compiler (admissibility) and runtime (execution)."
 requires-python = ">=3.11"
 dependencies = ["pyyaml"]
 
 [project.scripts]
-# The Construction Compiler CLI — deterministic S8→artifact compilation (no agent). `python -m` works
-# today; this console entry activates on the next editable reinstall (bootstrap).
+# The single user-facing executable — four lifecycle verbs (author / construct / validate / promote).
+# `python -m pgs_change_mgmt.engine.cli` works today; this console entry activates on the next
+# editable reinstall (bootstrap).
+pgs_change = "pgs_change_mgmt.engine.cli:main"
+# DEPRECATED alias — use `pgs_change construct`. Kept for back-compat; removed after the next release.
 pgs_construct = "pgs_change_mgmt.engine.construction_cli:main"
 
 [tool.setuptools.packages.find]

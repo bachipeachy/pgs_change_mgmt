@@ -12,8 +12,10 @@ import argparse
 import json
 import os
 import sys
+from datetime import datetime, timezone
 from pathlib import Path
 
+from . import governance_surface
 from . import validation as V
 
 PASS, FAIL = 0, 2
@@ -83,15 +85,75 @@ def cmd_promote(args) -> int:
     print(f"Promotion gate    : PASS  (validation evidence {report.get('status')})")
     print(f"  Subject         : {report.get('subject')}")
     print(f"  Scenario        : {report.get('scenario_code')}")
+
+    finale = Path(args.frm)
+    if not finale.is_absolute():
+        finale = Path.cwd() / finale
+    if not finale.exists():
+        print(f"Promotion REFUSED — finale artifact dir not found: {finale}\n"
+              f"  produce it first: construct … --out {args.frm}")
+        return FAIL
+
+    # Governance gate — a CR discovers the surface changes it needs (governance_impact.json) but never
+    # performs them. Promotion refuses until the canonical surface already satisfies the impact; the
+    # governance authority approves separately. Promotion NEVER writes governance.
+    gi_path = finale / "governance_impact.json"
+    if gi_path.exists():
+        impact_doc = json.loads(gi_path.read_text())
+        missing = governance_surface.missing_approvals(impact_doc)
+        if missing:
+            print("Governance gate   : BLOCKED — the canonical CT surface does not yet admit:")
+            for fq in missing:
+                print(f"    - {fq}")
+            print(f"  These are DISCOVERY, not authority: the governance authority must approve them "
+                  f"(add to the canonical surface). See {gi_path}. Promotion never writes governance.")
+            return FAIL
+        print("Governance gate   : PASS  (all required CT surface additions approved)")
+
     if not args.confirm:
-        print("  Ready to promote. Re-run with --confirm to fast-forward the validated candidate into "
-              "the production snapshot (a deliberate, hard-to-reverse step).")
+        print("  Ready to promote. Re-run with --confirm to copy the finale artifact set into the owning "
+              "source registries and let the compiler be the gate (a deliberate, hard-to-reverse step).")
         return PASS
-    # Actual promotion (candidate → protocol_snapshot) is intentionally not automated here yet — it
-    # mutates the production snapshot and is owned by the operator. See validation_pipeline_design §8.
-    print("  --confirm given, but automated production promotion is not enabled in this build.\n"
-          "  Promote manually via the governed snapshot build once you have reviewed the evidence.")
-    return PASS
+
+    # Actual promotion (S9) — KISS: copy the finale artifact set into each owning PROTOCOL SOURCE
+    # registry (never the read-only snapshot), then the compiler is the gate. Rollback-all-on-red.
+    from . import bridge
+    structure = f"STRUCTURE_BUILD_{domain.upper()}_CONFIG_V0"
+    override = Path(args.registry_root) if args.registry_root else None
+    dest_desc = str(override) if override else "governed owner registries (from placement manifest)"
+    print(f"  Promoting {domain}/{subdomain} finale set → {dest_desc}  (compiler is the gate) ...")
+    try:
+        res = bridge.promote_set(finale, registry_root=override,
+                                 workspace=_workspace(), build_structure=structure)
+    except FileNotFoundError as exc:
+        print(f"Promotion REFUSED — {exc}")
+        return FAIL
+    for d in res.dests:
+        print(f"    → {d}")
+    if res.ok:
+        # S9 closure evidence — the Promotion certificate, symmetric with validation_report.json.
+        # Records the PROMOTED transition: what was promoted, where, and that the compiler accepted it.
+        report_out = dossier / "promotion" / "promotion_report.json"
+        report_out.parent.mkdir(parents=True, exist_ok=True)
+        report_out.write_text(json.dumps({
+            "subject": report.get("subject"),
+            "scenario_code": report.get("scenario_code"),
+            "status": "PROMOTED",
+            "validation_evidence": report.get("status"),
+            "artifacts_promoted": len(res.dests),
+            "repos": res.repos,
+            "destinations": [str(d) for d in res.dests],
+            "snapshot": "compiles + validates (pi validate --strict)",
+            "timestamp": datetime.now(timezone.utc).isoformat(),
+        }, indent=2) + "\n")
+        print(f"  Promotion COMPLETE — {len(res.dests)} artifacts promoted into "
+              f"{len(res.repos)} repo(s): {', '.join(res.repos)}; snapshot compiles + validates.")
+        print(f"  Evidence          : {report_out}")
+        return PASS
+    print("  Promotion FAILED — rolled back (registry unchanged). Compiler diagnostics:")
+    for ln in res.diagnostics:
+        print("      " + ln)
+    return FAIL
 
 
 def main(argv=None) -> int:
@@ -102,6 +164,12 @@ def main(argv=None) -> int:
     v.set_defaults(fn=cmd_validate)
     p = sub.add_parser("promote", help="gate: promote only if validation evidence is PASS")
     p.add_argument("--dossier", required=True)
+    p.add_argument("--registry-root", dest="registry_root", default=None,
+                   help="OPTIONAL override of the promotion destination root (e.g. a throwaway dir for a "
+                        "dry-run). Default: governed owner registries from the placement manifest — a "
+                        "cross-repo delta routes to each owning repo. NEVER the read-only protocol_snapshot")
+    p.add_argument("--from", dest="frm", default="constructed",
+                   help="finale artifact dir (the constructed .md set); default: ./constructed")
     p.add_argument("--confirm", action="store_true", help="perform the promotion (deliberate)")
     p.set_defaults(fn=cmd_promote)
     args = ap.parse_args(argv)

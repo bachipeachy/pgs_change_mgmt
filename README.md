@@ -10,9 +10,18 @@ Mandate** — producing a complete, reviewable **dossier** *before* any protocol
 
 ---
 
-## Status — v0.6.1
+## Status — v0.8.0
 
 Public debut in **PGS v0.5.0**; `pi` Protocol-Inspection surface wired in at **v0.5.1**.
+
+**v0.8.0 — one CLI, four lifecycle verbs.** The whole change-management lifecycle is now driven by a
+single executable — `pgs_change author → construct → validate → promote` — mapping to the four
+user-visible phases (Design → Construction → Execution Validation → Promotion). The governance stages
+(S1–S9) and compiler mechanics (build / admit / persist) are internal; `--stage` remains only as a
+debug flag. **Stage 9 (Promotion) is now wired end-to-end** — `promote` copies the constructed finale
+artifacts into the domain protocol-source registry and lets the compiler be the gate. See
+[The `pgs_change` CLI](#the-pgs_change-cli--four-lifecycle-verbs). The CLI is a thin facade over the
+existing engine modules (frozen contract); the internal package reorg is a post-release refactor.
 
 **v0.6.1 — the all-structured pipeline.** Every dossier stage (1 → 7) is now a **structured
 register document** — the worker emits register rows, a deterministic renderer owns the document,
@@ -32,7 +41,7 @@ repo's own `pyproject.toml`. There is no single PGS release version.
 `pgs_change_mgmt` governs the **Change Request → Protocol Artifact** lifecycle in two tiers:
 
 ```
-  ── DOSSIER TIER (this pipeline — `run_change_mgmt_dossier.sh`) ─────────────────────────
+  ── DOSSIER TIER (this pipeline — `pgs_change author`) ─────────────────────────────────
   Stage 1   Change Request          classification + problem / outcome / known facts
   Stage 2   Domain Model            confirm the semantic model against the snapshot
   Stage 3   Analysis Loop           REUSE / EXTEND / AUTHOR_NEW decisions, by evidence
@@ -113,7 +122,34 @@ declared context instead of "the whole world."
 
 ---
 
-## Running the Pipeline
+## The `pgs_change` CLI — four lifecycle verbs
+
+One executable drives the whole lifecycle. The user thinks in **phases**; the governance stages
+(S1–S9) and the compiler mechanics (build / admit / persist) stay internal — `--stage` survives only
+as a debug flag, never the public model.
+
+| Verb | Phase | Produces |
+|------|-------|----------|
+| `pgs_change author` | S1–S7 (Design) | **CR-IR** — `--guided` switches from the automated worker to interactive export/import |
+| `pgs_change construct` | S8 + Admission | **ADMITTED_UNVALIDATED** delta — internally runs build → admit |
+| `pgs_change validate` | Execution Validation | **EXECUTION_VALIDATED** — runs the CR's acceptance scenario |
+| `pgs_change promote` | S9 (Promotion) | **Production Baseline** — copies the finale artifacts to the domain source registry; the compiler is the gate |
+
+```bash
+pgs_change author    [--guided] --worker … --model … [--stage N]
+pgs_change construct  --projection <cr_ir> --domain … --subdomain … [--persist DIR]
+pgs_change validate   --dossier blockchain/chain
+pgs_change promote    --dossier blockchain/chain --registry-root <domain-source-registry> [--from constructed] --confirm
+```
+
+From the workspace, `scripts/run_change_mgmt.sh` wraps this (sets `PGS_WORKSPACE` and the venv).
+`pgs_change` is a **thin facade** — each verb forwards into the existing engine modules unchanged.
+`python -m pgs_change_mgmt.engine.cli <verb>` works today; the `pgs_change` console script activates on
+the next editable reinstall. `pgs_construct` remains a deprecated alias for `construct`.
+
+---
+
+## Running the Pipeline — `author` (Stages 1→7)
 
 From the workspace (sets `PGS_WORKSPACE` and the venv for you):
 
@@ -121,18 +157,21 @@ From the workspace (sets `PGS_WORKSPACE` and the venv for you):
 cd pgs_workspace/scripts
 
 # Full dossier pipeline (Stages 1→7)
-./run_change_mgmt_dossier.sh --worker qwen --model qwen3.5:latest
+./run_change_mgmt.sh author --worker qwen --model qwen3.5:latest
 
 # A single stage (loads its upstream handoffs from disk)
-./run_change_mgmt_dossier.sh --worker qwen --model qwen3.5:latest --stage 6b
+./run_change_mgmt.sh author --worker qwen --model qwen3.5:latest --stage 6b
 
 # An explicit subset
-./run_change_mgmt_dossier.sh --worker qwen --model qwen3.5:latest --stages 6b,7
+./run_change_mgmt.sh author --worker qwen --model qwen3.5:latest --stages 6b,7
 
 # A stronger / different worker
-./run_change_mgmt_dossier.sh --worker qwen   --model qwen2.5-coder:32b
-./run_change_mgmt_dossier.sh --worker claude --model claude-opus-4-8     # needs ANTHROPIC_API_KEY
+./run_change_mgmt.sh author --worker qwen   --model qwen2.5-coder:32b
+./run_change_mgmt.sh author --worker claude --model claude-opus-4-8     # needs ANTHROPIC_API_KEY
 ```
+
+*(The older `run_change_mgmt_dossier.sh` / `run_change_mgmt_interactive.sh` shells still work as
+deprecated forwarders to `run_change_mgmt.sh author` / `author --guided`.)*
 
 `--worker` and `--model` are **required** — the model is always a conscious choice, never a silent
 default. Each stage prints a live R/Y/G grounding stream and a per-stage figure of merit:
@@ -161,13 +200,13 @@ conversational model, and PGS ingress-validates and imports it — identical dow
 
 ```bash
 # 1. EXPORT — write the governed Stage Package for a stage (stamps the live snapshot hash)
-PGS_WORKSPACE=/abs python -m pgs_change_mgmt.engine.run_interactive --seed blockchain_chain --stage 1 --export
+pgs_change author --guided --seed blockchain_chain --stage 1 --export
 #    → open stage_1/system_prompt.md + user_prompt.md in a chat LLM; ground each token in
 #      stage_1/context/grounding_spec.json via `pi vocab search <TOKEN>`; paste the reply into
 #      stage_1/response.md  (a 0-result is a FINAL answer — the artifact does not exist)
 
 # 2. IMPORT — ingress-validate at the human mutation boundary, then run the engine for that stage
-PGS_WORKSPACE=/abs python -m pgs_change_mgmt.engine.run_interactive --seed blockchain_chain --stage 1 --import \
+pgs_change author --guided --seed blockchain_chain --stage 1 --import \
     --model-label claude-code --diagnose
 ```
 
@@ -230,13 +269,18 @@ Compilation Unit  =  Baseline Overlay  ∪  Generated Delta  ∪  Supplementary 
   families, so it admits with zero supplementary. See the S8 renderer taxonomy below.)*
 
 ```bash
-PGS_WORKSPACE=/abs python -m pgs_change_mgmt.engine.construction_cli admit \
+pgs_change construct \
     --projection <dossier>/cr_ir [--include <supplementary_dir>] \
     --domain <domain> --subdomain <subdomain>
 # → Construction Status : CONSTRUCTION COMPLETE      (verdict first)
 # → Admission Status    : PASS                        (exit 0; 2 = rejected)
 # → Completeness        : 16 / 16  (100%)
 ```
+
+`construct` runs the two S8 mechanics as one verb — it emits the finale artifact set (to `--out`,
+default `constructed/`, the input to `promote`) and then forms the Compilation Unit and runs this
+admission gate. The underlying `construction_cli {build|validate|graph|explain|admit}` subcommands
+remain for isolated use (e.g. the pure non-emitting `admit` gate).
 
 The report **leads with the verdict, not the count**. Two distinct states:
 
@@ -269,7 +313,7 @@ exact snapshot* — the chain of custody is `Constructed Delta → Admitted Comp
 Snapshot → Promoted Baseline`, with no recompilation at promotion.
 
 ```bash
-PGS_WORKSPACE=/abs python -m pgs_change_mgmt.engine.construction_cli admit \
+pgs_change construct \
     --projection <dossier>/cr_ir [--include <supplementary_dir>] \
     --domain <domain> --subdomain <subdomain> --persist /abs/test_ws
 # → Construction Status : CONSTRUCTION COMPLETE
@@ -283,23 +327,64 @@ admission does not require. Those checks run in the **Execution Validation** pha
 implementations are authored and `pgs build` marks the snapshot `VALID`. Zero-pollution: the whole build
 happens under an isolated federation base; the canonical repos are untouched.
 
-### CR Lifecycle — five states, the first three enforced as gates
+### CR Lifecycle — five states, all five now driven by a CLI verb
 
 A change request moves through five **machine-distinguishable** states, each a stronger claim than the
-last. These states *emerged from implementation* — they were not invented up front. The first three are
-enforced as gates today; the last two are the Execution-Validation and Promotion phases.
+last. These states *emerged from implementation* — they were not invented up front. Each transition is
+enforced as a gate and driven by one `pgs_change` verb.
 
 ```
 DRAFT
-  ↓   guided authoring → CR-IR
-CONSTRUCTION_COMPLETE   ← S8 generated every artifact the CR needs (0 UNRENDERED_FAMILY)   [GATE ✓]
+  ↓   author              → CR-IR
+CONSTRUCTION_COMPLETE   ← S8 generated every artifact the CR needs (0 UNRENDERED_FAMILY)   [GATE ✓]  construct
   ↓   admission (Protocol Admission Certificate)
-ADMITTED_UNVALIDATED    ← the Protocol Compiler accepts the Compilation Unit                [GATE ✓]
+ADMITTED_UNVALIDATED    ← the Protocol Compiler accepts the Compilation Unit                [GATE ✓]  construct
   ↓   implementation + execution
-EXECUTION_VALIDATED     ← CT/CS impls present; conformance + runtime pass                   [gate — next]
+EXECUTION_VALIDATED     ← CT/CS impls present; conformance + runtime pass                   [GATE ✓]  validate
   ↓   promotion
-PROMOTED                ← merged into the canonical baseline
+PROMOTED                ← finale artifacts copied to each owning source registry;
+                          the compiler is the gate (compile → build → pi validate --strict) [GATE ✓]  promote
 ```
+
+```bash
+# Execution Validation — run the CR's acceptance scenario against the candidate snapshot
+pgs_change validate --dossier blockchain/chain          # → Validation Status : PASS
+
+# Promotion (S9) — gated on PASS evidence + explicit --confirm; rollback-all-on-red
+pgs_change promote  --dossier blockchain/chain --confirm   # → Promotion COMPLETE
+```
+
+Promotion writes only to **protocol source** registries (never the read-only `protocol_snapshot/`); the
+normal compiler build then regenerates the snapshot. It is **owner-aware**: each artifact is written to
+the registry its owner governs, read from the **Placement Manifest** (`placement_manifest.json`, emitted
+beside the finale set at construction). The manifest also carries a **`build_plan`**: construction
+computes the rebuild *scope* once (a delta touching only its own domain rebuilds that domain's structure;
+a **platform-touching** delta — one that introduces a domain-neutral artifact such as a reusable
+`capability_transforms::` transform — rebuilds the whole platform via `compile --all-structures`).
+Promotion *executes* the declared plan; it never infers whether a CR is "mixed" or decides how much to
+rebuild. Compute once, declare once, consume everywhere. The build is **transactional**: the workspace
+snapshot is backed up first and restored on any failure, so a red build leaves registries *and*
+workspace byte-identical. A delta that spans repositories — e.g. a blockchain CR that
+introduces a reusable `capability_transforms::` transform owned by `pgs_transforms` — routes each
+artifact to its owning repo, then a single compile + build + `pi validate --strict` gates the whole set
+(the build discovers every layer, so cross-repo references resolve); red rolls back across *all* touched
+repos. Ownership is resolved once (Admission) and persisted — promotion **consumes** the decision, it
+never recomputes it. `--registry-root` remains as an optional override of the destination root (e.g. a
+throwaway dir for a dry-run); by default promotion routes by governed ownership. Because `promote`
+rebuilds the whole workspace snapshot as its gate, expect the rebuilt snapshot to be part of the
+release commit.
+
+**Governance Impact — a CR discovers governance changes; it never makes them.** When a CR introduces
+new protocol vocabulary (e.g. new capability transforms), those opcodes must be admitted by a governed
+`allowed_capability_transforms` surface — a **governance act**. Under PGS doctrine a CR never performs
+that act. Construction emits a **`governance_impact.json`** beside the finale set: a purely descriptive
+enumeration of the surface additions this CR *requires* (which surface, which repo, which FQDNs) — zero
+authority. The governance authority then decides — approve, reject, modify, defer — and, if approved,
+adds the entries to the canonical surface separately. Promotion **gates** on it: `promote` refuses (before
+touching anything) until the canonical surface already satisfies the impact, and it **never writes the
+surface itself**. This closes the transformation story symmetrically — *construction discovers,
+governance authorizes, promotion deploys* — and makes governance change itself protocol-governed rather
+than an ambient side effect of deployment.
 
 `ADMITTED_UNVALIDATED` is a **protocol lifecycle state, not merely a snapshot attribute**: it names a
 delta that is construction-complete and compile-admitted but not yet execution-validated. The **Protocol

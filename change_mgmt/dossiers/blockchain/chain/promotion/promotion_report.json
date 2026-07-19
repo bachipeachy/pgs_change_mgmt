@@ -1,0 +1,31 @@
+{
+  "subject": "blockchain::chain",
+  "scenario_code": "ACCEPTANCE_CHAIN_GENESIS_TRANSFER_V0",
+  "status": "PROMOTED",
+  "validation_evidence": "EXECUTION_VALIDATED",
+  "artifacts_promoted": 16,
+  "repos": [
+    "pgs_blockchain",
+    "pgs_transforms"
+  ],
+  "destinations": [
+    "/Users/bp/pgs/pgs_blockchain/pgs_blockchain/registry/chain/capability_contracts/CC_COMMIT_BLOCK_CANONICAL_V0.md",
+    "/Users/bp/pgs/pgs_blockchain/pgs_blockchain/registry/chain/capability_contracts/CC_CREATE_GENESIS_BLOCK_V0.md",
+    "/Users/bp/pgs/pgs_blockchain/pgs_blockchain/registry/chain/capability_contracts/CC_RECONCILE_BALANCES_V0.md",
+    "/Users/bp/pgs/pgs_blockchain/pgs_blockchain/registry/chain/capability_contracts/CC_VALIDATE_PREDECESSOR_LINK_V0.md",
+    "/Users/bp/pgs/pgs_capabilities/pgs_transforms/registry/capability_transforms/CT_PURE_COMPARE_EQUAL_V0.md",
+    "/Users/bp/pgs/pgs_blockchain/pgs_blockchain/registry/chain/capability_transforms/CT_PURE_DERIVE_BALANCES_V0.md",
+    "/Users/bp/pgs/pgs_blockchain/pgs_blockchain/registry/chain/capability_transforms/CT_PURE_EXTRACT_PREDECESSOR_HASH_V0.md",
+    "/Users/bp/pgs/pgs_blockchain/pgs_blockchain/registry/chain/capability_transforms/CT_PURE_HASH_BLOCK_V0.md",
+    "/Users/bp/pgs/pgs_blockchain/pgs_blockchain/registry/chain/events/EV_GENESIS_CREATED_V0.md",
+    "/Users/bp/pgs/pgs_blockchain/pgs_blockchain/registry/chain/intents/IN_BOOTSTRAP_GENESIS_CHAIN_V0.md",
+    "/Users/bp/pgs/pgs_blockchain/pgs_blockchain/registry/chain/intents/IN_COMMIT_BLOCK_V0.md",
+    "/Users/bp/pgs/pgs_blockchain/pgs_blockchain/registry/chain/runtime_bindings/RB_BOOTSTRAP_GENESIS_CHAIN_V0.md",
+    "/Users/bp/pgs/pgs_blockchain/pgs_blockchain/registry/chain/runtime_bindings/RB_COMMIT_BLOCK_V0.md",
+    "/Users/bp/pgs/pgs_blockchain/pgs_blockchain/registry/chain/structures/STRUCTURE_CHAIN_STORAGE_V0.md",
+    "/Users/bp/pgs/pgs_blockchain/pgs_blockchain/registry/chain/workflows/WF_BOOTSTRAP_GENESIS_CHAIN_V0.md",
+    "/Users/bp/pgs/pgs_blockchain/pgs_blockchain/registry/chain/workflows/WF_COMMIT_BLOCK_V0.md"
+  ],
+  "snapshot": "compiles + validates (pi validate --strict)",
+  "timestamp": "2026-07-18T03:45:32.830420+00:00"
+}

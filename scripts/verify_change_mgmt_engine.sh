@@ -30,19 +30,21 @@ python -c "
 from pgs_change_mgmt.contracts import GroundingProvider, Evaluator, Renderer, Worker
 from pgs_change_mgmt.grounding import PiGroundingProvider
 from pgs_change_mgmt.evaluator import IdentityEvaluator
-from pgs_change_mgmt.renderer import CCRenderer, INRenderer, RBRenderer, WFRenderer
+from pgs_change_mgmt.renderer import (CCRenderer, INRenderer, RBRenderer, WFRenderer,
+                                      CTRenderer, StructureRenderer, EVRenderer)
 from pgs_change_mgmt.worker import OllamaWorker
 g = PiGroundingProvider()
 assert isinstance(g, GroundingProvider) and isinstance(IdentityEvaluator(), Evaluator)
 assert isinstance(OllamaWorker(g), Worker)
-assert all(isinstance(r, Renderer) for r in (CCRenderer(),INRenderer(),RBRenderer(),WFRenderer()))
-print('grounding, evaluator, renderer(×4), worker all conform ✓')
+assert all(isinstance(r, Renderer) for r in (CCRenderer(),INRenderer(),RBRenderer(),WFRenderer(),
+                                             CTRenderer(),StructureRenderer(),EVRenderer()))
+print('grounding, evaluator, renderer(×7), worker all conform ✓')
 "
 
 echo ""; echo "════════ 3. grounding smoke (live pi snapshot) ════════"
 python -m pgs_change_mgmt.grounding.smoke_pi_tools | tail -1
 
-echo ""; echo "════════ 4. renderer admissibility (CC/IN/WF/RB → valid YAML) ════════"
+echo ""; echo "════════ 4. renderer admissibility (all 7 families CC/CT/IN/WF/RB/STRUCTURE/EV → valid YAML) ════════"
 python -m pgs_change_mgmt.renderer._selftest | tail -1
 
 echo ""; echo "════════ 5. evaluator A–E identity + D↔E split ════════"
@@ -81,5 +83,11 @@ python -m pgs_change_mgmt.engine._design_review_selftest | tail -1
 
 echo ""; echo "════════ 14. Compilation Unit source ingest (load_sources: FQDN recovery, doc-skip, dedup) ════════"
 python -m pgs_change_mgmt.engine._compilation_unit_selftest | tail -1
+
+echo ""; echo "════════ 15. Placement Manifest (owner-aware promotion: consume the decision, never recompute) ════════"
+python -m pgs_change_mgmt.engine._placement_selftest | tail -1
+
+echo ""; echo "════════ 16. Governance Impact (construction discovers, governance approves, promotion consumes) ════════"
+python -m pgs_change_mgmt.engine._governance_impact_selftest | tail -1
 
 echo ""; echo "✅ ALL OFFLINE SELF-TESTS GREEN"

@@ -1,13 +1,16 @@
 """Renderer registry — one `contracts.Renderer` per artifact kind, dispatched by `kind`.
 
-The seam is *per kind* by design (`Renderer.kind` ∈ CC | IN | WF | RB | CT | CS | STRUCTURE):
+The seam is *per kind* by design (`Renderer.kind` ∈ CC | IN | WF | RB | CT | CS | STRUCTURE | EV):
 each kind has its own deterministic structured-contract → machine-artifact expansion. Adding
 a kind is registering a new conforming `Renderer` here — an addition, never a refactor.
 
-Today exactly one kind is implemented (CC, the proven Phase-0 renderer). The other kinds are
-*declared* (`KINDS`) but unregistered: `get_renderer` for an unimplemented kind fails loudly
-rather than silently rendering the wrong shape. We do not fabricate the six remaining
-renderers ahead of a proven contract object for each — that would fossilize unproven syntax.
+Every family the Construction Compiler renders is registered here: CC, IN, WF, RB (CR-authoring
+kinds), CT (capability transform), STRUCTURE (storage topology), and EV (event). Together these
+seven cover the full construction delta (e.g. the 16-artifact blockchain/chain CR). Only CS
+(capability side effect) remains *declared* (`KINDS`) but unregistered — no CR has yet needed a
+newly-authored CS. `get_renderer` for a declared-but-unimplemented kind fails loudly rather than
+silently rendering the wrong shape; we never fabricate a renderer ahead of a proven contract
+object, which would fossilize unproven syntax.
 """
 
 from __future__ import annotations
@@ -19,15 +22,22 @@ from .cc import CCRenderer
 from .intent import INRenderer
 from .runtime_binding import RBRenderer
 from .workflow import WFRenderer
+from .transform import CTRenderer
+from .structure import StructureRenderer
+from .event import EVRenderer
 
 # All artifact kinds the seam will eventually cover (mirrors contracts.Renderer.kind).
-KINDS: tuple[str, ...] = ("CC", "IN", "WF", "RB", "CT", "CS", "STRUCTURE")
+KINDS: tuple[str, ...] = ("CC", "IN", "WF", "RB", "CT", "CS", "STRUCTURE", "EV")
 
 # Concrete renderers available today. A new kind is added here, not by changing callers.
-# CC/IN/WF/RB are the CR-authoring kinds; CT/CS (capability primitives) and STRUCTURE
-# (storage topology) are authored rarely and remain declared-but-unimplemented for now.
+# CC/IN/WF/RB are the CR-authoring kinds; CT (capability transform), STRUCTURE (storage
+# topology), and EV (event) complete the construction delta. CS (capability side effect)
+# remains declared-but-unimplemented until a CR authors a new one.
 RENDERERS: dict[str, Renderer] = {
-    r.kind: r for r in (CCRenderer(), INRenderer(), RBRenderer(), WFRenderer())
+    r.kind: r for r in (
+        CCRenderer(), INRenderer(), RBRenderer(), WFRenderer(),
+        CTRenderer(), StructureRenderer(), EVRenderer(),
+    )
 }
 
 

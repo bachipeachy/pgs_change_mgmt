@@ -26,12 +26,44 @@ Design:
 
 from __future__ import annotations
 
+import json
 import re
+import shutil
 import subprocess
+import tempfile
 from dataclasses import dataclass, field
 from pathlib import Path
 
 from pgs_governance.implementation.artifact_kinds import REGISTRY
+
+PLACEMENT_MANIFEST = "placement_manifest.json"
+
+# The workspace snapshot projections the compiler build regenerates. Promotion backs these up before
+# the build and restores them on any failure — so a red build leaves the workspace byte-identical
+# (the compiler's sync is not itself transactional; this makes promotion so).
+_SNAPSHOT_DIRS = ("protocol_snapshot", "tokenized_snapshot", "evidence_snapshot",
+                  "vocabulary_snapshot", "trust_snapshot")
+
+
+def _backup_snapshot(workspace: Path) -> Path:
+    """Copy the workspace snapshot projections aside; return the backup dir."""
+    tmp = Path(tempfile.mkdtemp(prefix="promote_snapshot_"))
+    for d in _SNAPSHOT_DIRS:
+        src = Path(workspace) / d
+        if src.exists():
+            shutil.copytree(src, tmp / d, symlinks=True)
+    return tmp
+
+
+def _restore_snapshot(workspace: Path, backup: Path) -> None:
+    """Restore the snapshot projections from a backup and discard it (rollback of the build's sync)."""
+    for d in _SNAPSHOT_DIRS:
+        dst, src = Path(workspace) / d, Path(backup) / d
+        if dst.exists():
+            shutil.rmtree(dst)
+        if src.exists():
+            shutil.copytree(src, dst, symlinks=True)
+    shutil.rmtree(backup, ignore_errors=True)
 
 _CODE_HEADER = re.compile(r"^-\s*\*\*Artifact Code:\*\*\s*([A-Z][A-Z0-9_]*_V\d+)", re.MULTILINE)
 _CODE_TITLE = re.compile(r"^#\s*([A-Z][A-Z0-9_]*_V\d+)\s*$", re.MULTILINE)
@@ -125,4 +157,131 @@ def promote_and_compile(authoring_md: str, *, registry_root: Path, subdomain: st
                     d.rmdir()
                 except OSError:
                     break
+    return res
+
+
+@dataclass
+class PromotionResult:
+    """The outcome of promoting a whole finale artifact set (all-or-nothing)."""
+    dests: list[Path] = field(default_factory=list)
+    repos: list[str] = field(default_factory=list)   # distinct owner packages the set was promoted into
+    compiled: bool = False
+    validated: bool = False
+    kept: bool = False                      # True ⇒ the whole set retained in the registry (green)
+    diagnostics: list[str] = field(default_factory=list)
+
+    @property
+    def ok(self) -> bool:
+        return self.compiled and self.validated and self.kept
+
+
+def _rollback(priors: list[tuple[Path, str | None]]) -> None:
+    """Restore every dest to its prior content (or remove it) — never leave a partial promotion."""
+    for dest, prior in priors:
+        if prior is not None:
+            dest.write_text(prior)
+        else:
+            dest.unlink(missing_ok=True)
+            for d in (dest.parent, dest.parent.parent):
+                try:
+                    d.rmdir()
+                except OSError:
+                    break
+
+
+def load_placement_manifest(finale_dir: Path) -> dict:
+    """Read the Placement Manifest produced by construction/admission (fail hard if absent).
+
+    The manifest is the authoritative ownership decision, computed once during Ownership Resolution.
+    Promotion CONSUMES it and never re-resolves ownership."""
+    path = Path(finale_dir) / PLACEMENT_MANIFEST
+    if not path.exists():
+        raise FileNotFoundError(
+            f"no {PLACEMENT_MANIFEST} in {finale_dir} — promotion consumes the placement decision, it "
+            f"does not recompute it. Produce it with `construct … --out {finale_dir}`.")
+    return json.loads(path.read_text())
+
+
+def plan_promotion(manifest: dict, finale_dir: Path, *, registry_root: Path | None = None
+                   ) -> list[tuple[Path, str]]:
+    """Resolve each placement to a concrete (destination, source_markdown) pair — pure, no I/O beyond
+    reading the finale ``.md`` sources. Destination = ``owner registry_root / relative_path``, taking
+    the governed owner root from the manifest unless a single ``registry_root`` override is supplied
+    (a test/dry-run affordance; production promotion routes by governed ownership, so a delta that
+    spans repos lands in each owning repo)."""
+    finale_dir = Path(finale_dir)
+    plan: list[tuple[Path, str]] = []
+    for p in manifest["placements"]:
+        src = finale_dir / f"{p['code']}.md"
+        if not src.exists():
+            raise FileNotFoundError(f"placement manifest references {p['code']}.md, missing in {finale_dir}")
+        base = Path(registry_root) if registry_root is not None else Path(p["registry_root"])
+        plan.append((base / p["relative_path"], src.read_text()))
+    return plan
+
+
+def _compile_cmds(build_plan: dict, fallback_structure: str) -> list[list[str]]:
+    """The compile invocations promotion executes — read from the declared build plan, never inferred.
+
+    `mode: all` → one whole-platform `compile --all-structures` (a platform-touching delta rebuilds
+    every structure); `mode: structures` → one `compile --structure <S>` per declared structure
+    (a domain-only delta rebuilds just its domain). Missing plan ⇒ the caller's fallback structure."""
+    base = ["python", "-m", "pgs_compiler.cli", "compile"]
+    if not build_plan:
+        return [base + ["--structure", fallback_structure]]
+    if build_plan.get("mode") == "all":
+        return [base + ["--all-structures"]]
+    return [base + ["--structure", s] for s in build_plan.get("structures", [fallback_structure])]
+
+
+def promote_set(finale_dir: Path, *, workspace: Path, build_structure: str,
+                registry_root: Path | None = None, keep_on_fail: bool = False) -> PromotionResult:
+    """Promote a whole finale artifact set to its governed owner registries (Stage 9 — KISS).
+
+    Three dumb consumes, one transactional swap — promotion infers nothing:
+      * PLACEMENT — each artifact is written to the destination the manifest already resolved (owner
+        ``registry_root`` + relative path); a delta that spans repos lands in each owning repo.
+      * BUILD PLAN — the compiler recompiles exactly the structures construction *declared* (whole
+        platform for a platform-touching delta, the domain structure for a domain-only one). Promotion
+        never decides scope.
+      * GATE — ``build --workspace`` + ``pi validate --strict``.
+    The workspace snapshot is backed up before the build and restored on any failure, so a red build
+    leaves both the registries *and* the workspace byte-identical. Promotion judges nothing — the
+    protocol does.
+    """
+    manifest = load_placement_manifest(finale_dir)
+    plan = plan_promotion(manifest, finale_dir, registry_root=registry_root)
+    compiles = _compile_cmds(manifest.get("build_plan", {}), build_structure)
+
+    res = PromotionResult()
+    res.repos = sorted({p["package"] for p in manifest["placements"]})
+    priors: list[tuple[Path, str | None]] = []
+    backup = _backup_snapshot(workspace)
+    try:
+        for dest, text in plan:
+            priors.append((dest, dest.read_text() if dest.exists() else None))
+            dest.parent.mkdir(parents=True, exist_ok=True)
+            dest.write_text(text)
+            res.dests.append(dest)
+
+        res.compiled = True
+        for cmd in compiles:                                   # declared rebuild scope, executed in order
+            ok, out = _run(cmd)
+            if not ok:
+                res.compiled = False
+                res.diagnostics = _diagnostics(out, build_structure)
+                break
+        if res.compiled:
+            built, bout = _run(["python", "-m", "pgs_compiler.cli", "build", "--workspace", str(workspace)])
+            validated, vout = _run(["pi", "--workspace", str(workspace), "validate", "--strict"])
+            res.validated = built and validated
+            if not res.validated:
+                res.diagnostics = _diagnostics(bout + vout, build_structure)
+    finally:
+        if res.compiled and res.validated:
+            res.kept = True
+            shutil.rmtree(backup, ignore_errors=True)          # green — keep the rebuilt snapshot
+        elif not keep_on_fail:
+            _rollback(priors)                                  # registries back
+            _restore_snapshot(workspace, backup)               # workspace snapshot back
     return res

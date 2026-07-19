@@ -58,6 +58,23 @@ CONTRACTS = {
             {"node": "EXIT", "type": "EXIT", "reason": "EXITED"},
         ],
     },
+    "CT": {
+        "code": "CT_DEMO_V0", "summary": "demo pure transform",
+        "inputs": {"x": "object"}, "outputs": {"y": "string"},
+    },
+    "STRUCTURE": {
+        "code": "STRUCTURE_DEMO_STORAGE_V0", "summary": "demo storage topology",
+        "domain": "blockchain", "subdomain": "demo",
+        "stores": [{"name": "BLOCKS", "storage_type": "CS_APPENDONLY_JSONL_V0",
+                    "path": "{{module_data_root}}/demo/blocks.jsonl"}],
+    },
+    "EV": {
+        "code": "EV_DEMO_HAPPENED_V0", "summary": "demo fact recorded",
+        "description": "a demo event",
+        "emitted_by": ["blockchain::CC_DO_V0"],
+        "payload": [{"field": "block_id", "type": "string", "required": "true",
+                     "format": "hex", "description": "the block id"}],
+    },
 }
 
 EXPECT = {
@@ -65,7 +82,14 @@ EXPECT = {
     "IN": ("in_code", "IN_DEMO_V0"),
     "RB": ("rb_code", "RB_DEMO_V0"),
     "WF": ("wf_code", "WF_DEMO_V0"),
+    "CT": ("ct_code", "CT_DEMO_V0"),
+    "STRUCTURE": ("structure_code", "STRUCTURE_DEMO_STORAGE_V0"),
+    "EV": ("ev_code", "EV_DEMO_HAPPENED_V0"),
 }
+
+# Most families are topology-governed; STRUCTURE and EV are constitution-governed (mirrors the
+# real compiled artifacts). The machine block's `governed_by` namespace differs per kind.
+GOV_PREFIX = {"STRUCTURE": "fb.constitution::", "EV": "fb.constitution::"}
 
 
 def main() -> int:
@@ -78,7 +102,8 @@ def main() -> int:
         doc = _machine(md)
         key, val = EXPECT[kind]
         assert doc[key] == val, f"{kind}: {key} != {val}"
-        assert doc["governed_by"].startswith("fb.topology::"), f"{kind}: governed_by"
+        assert doc["governed_by"].startswith(GOV_PREFIX.get(kind, "fb.topology::")), \
+            f"{kind}: governed_by"
         assert "core" in doc, f"{kind}: missing core"
         assert f"# {val}" in md and "## Header (Mandatory)" in md, f"{kind}: header"
         print(f"  {kind}: {val:14} machine OK ({key}, governed_by, core) ✓")
@@ -93,13 +118,14 @@ def main() -> int:
             raise
     print("  WF: dangling-route rejected ✓")
 
-    # Unimplemented kinds still fail loudly.
-    for k in ("CT", "CS", "STRUCTURE"):
+    # CS remains declared-but-unimplemented (no CR has authored a new one) — still fails loudly.
+    for k in ("CS",):
         try:
             get_renderer(k); raise SystemExit(f"{k} should be unimplemented")
         except NotImplementedError:
             pass
-    print("\nALL IMPLEMENTED RENDERERS ADMISSIBLE ✓ (CC, IN, RB, WF); CT/CS/STRUCTURE declared")
+    print("\nALL IMPLEMENTED RENDERERS ADMISSIBLE ✓ (CC, CT, EV, IN, RB, STRUCTURE, WF — "
+          "the 7 families composing the full construction delta); CS declared")
     return 0
 
 
